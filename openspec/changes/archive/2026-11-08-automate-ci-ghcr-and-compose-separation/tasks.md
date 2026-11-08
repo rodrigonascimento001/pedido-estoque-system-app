@@ -19,5 +19,5 @@
 ## 4. Local workflow documentation and verification
 
 - [x] 4.1 Document the two-repository local startup order, shared network contract, readiness checks, application startup, and independent shutdown commands.
-- [ ] 4.2 Run `mvn -B verify` and verify the documented local full-stack flow with both Compose projects.
+- [x] 4.2 Run `mvn -B verify` and verify the documented local full-stack flow with both Compose projects.
 - [x] 4.3 Confirm statically that a successful main workflow publishes all three private GHCR images with SHA and `main` tags, while develop does not publish images and no workflow deploys them.
