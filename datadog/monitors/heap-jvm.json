@@ -1,0 +1,22 @@
+{
+  "name": "[Pedidos/Estoque] Uso de heap da JVM alto",
+  "type": "query alert",
+  "query": "avg(last_10m):100 * avg:jvm.heap_memory{*} by {service} / avg:jvm.heap_memory_max{*} by {service} > 90",
+  "message": "**{{service.name}}** usa mais de 90% do heap máximo da JVM.\n\nRisco de GC pesado e `OutOfMemoryError`. Compare com as métricas de GC e o número de threads.",
+  "tags": [
+    "system:pedido-estoque",
+    "managed-by:json"
+  ],
+  "priority": 3,
+  "options": {
+    "thresholds": {
+      "critical": 90,
+      "warning": 80
+    },
+    "notify_no_data": false,
+    "require_full_window": false,
+    "include_tags": true,
+    "renotify_interval": 60,
+    "new_group_delay": 60
+  }
+}

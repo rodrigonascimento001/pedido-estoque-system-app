@@ -1,0 +1,22 @@
+{
+  "name": "[Pedidos/Estoque] Conflitos de lock otimista no estoque",
+  "type": "query alert",
+  "query": "sum(last_10m):sum:estoque.lock.conflito{*}.as_count() > 20",
+  "message": "Muitos conflitos de lock otimista na reserva de estoque: pedidos concorrentes disputam os mesmos produtos.\n\nNo APM, filtre os spans `estoque.reservar_item` e agrupe por `produto.id` para achar o produto quente.",
+  "tags": [
+    "system:pedido-estoque",
+    "managed-by:json"
+  ],
+  "priority": 3,
+  "options": {
+    "thresholds": {
+      "critical": 20,
+      "warning": 5
+    },
+    "notify_no_data": false,
+    "require_full_window": false,
+    "include_tags": true,
+    "renotify_interval": 60,
+    "new_group_delay": 60
+  }
+}

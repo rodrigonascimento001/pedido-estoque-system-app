@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  cloud:
+    gateway:
+      routes:
+        - id: pedido-service
+          uri: ${PEDIDO_SERVICE_URI:http://localhost:8081}
+          predicates:
+            - Path=/api/pedidos/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@ipKeyResolver}"
+        - id: estoque-service
+          uri: ${ESTOQUE_SERVICE_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/estoque/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@ipKeyResolver}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,gateway,metrics
+  statsd:
+    metrics:
+      export:
+        # desligado por padrão (dev local); o perfil "datadog" liga
+        enabled: false

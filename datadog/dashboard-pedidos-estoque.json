@@ -1,0 +1,892 @@
+{
+  "title": "Pedidos e Estoque: saga e saúde dos serviços",
+  "description": "Saga de pedidos via Kafka (pedido-service, estoque-service, api-gateway). Usa apenas métricas liberadas na allowlist do perfil datadog e as métricas de JVM do agente.",
+  "layout_type": "ordered",
+  "reflow_type": "fixed",
+  "template_variables": [
+    {
+      "name": "env",
+      "prefix": "env",
+      "default": "*"
+    },
+    {
+      "name": "service",
+      "prefix": "service",
+      "default": "*"
+    }
+  ],
+  "widgets": [
+    {
+      "definition": {
+        "type": "note",
+        "content": "Saga de pedidos (pedido-service)",
+        "background_color": "gray",
+        "font_size": "16",
+        "text_align": "left",
+        "vertical_align": "center",
+        "show_tick": false,
+        "tick_edge": "left",
+        "tick_pos": "50%",
+        "has_padding": true
+      },
+      "layout": {
+        "x": 0,
+        "y": 0,
+        "width": 12,
+        "height": 1
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Pedidos criados",
+        "autoscale": true,
+        "precision": 0,
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "sum:pedido.criado{$env}.as_count()",
+                "aggregator": "sum"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 1,
+        "width": 3,
+        "height": 2
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Confirmados",
+        "autoscale": true,
+        "precision": 0,
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "sum:pedido.confirmado{$env}.as_count()",
+                "aggregator": "sum"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 3,
+        "y": 1,
+        "width": 3,
+        "height": 2
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Cancelados",
+        "autoscale": true,
+        "precision": 0,
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "sum:pedido.cancelado{$env}.as_count()",
+                "aggregator": "sum"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ]
+          }
+        ]
+      },
+      "layout": {
+        "x": 6,
+        "y": 1,
+        "width": 3,
+        "height": 2
+      }
+    },
+    {
+      "definition": {
+        "type": "query_value",
+        "title": "Taxa de cancelamento",
+        "autoscale": true,
+        "precision": 1,
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "sum:pedido.cancelado{$env}.as_count()",
+                "aggregator": "sum"
+              },
+              {
+                "data_source": "metrics",
+                "name": "b",
+                "query": "sum:pedido.confirmado{$env}.as_count()",
+                "aggregator": "sum"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "100 * a / (a + b)"
+              }
+            ],
+            "conditional_formats": [
+              {
+                "comparator": ">",
+                "value": 20,
+                "palette": "white_on_red"
+              },
+              {
+                "comparator": ">",
+                "value": 10,
+                "palette": "white_on_yellow"
+              },
+              {
+                "comparator": "<=",
+                "value": 10,
+                "palette": "white_on_green"
+              }
+            ]
+          }
+        ],
+        "custom_unit": "%"
+      },
+      "layout": {
+        "x": 9,
+        "y": 1,
+        "width": 3,
+        "height": 2
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Pedidos por desfecho",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "criados",
+                "query": "sum:pedido.criado{$env}.as_count()"
+              },
+              {
+                "data_source": "metrics",
+                "name": "confirmados",
+                "query": "sum:pedido.confirmado{$env}.as_count()"
+              },
+              {
+                "data_source": "metrics",
+                "name": "cancelados",
+                "query": "sum:pedido.cancelado{$env}.as_count()"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "criados",
+                "alias": "criados"
+              },
+              {
+                "formula": "confirmados",
+                "alias": "confirmados"
+              },
+              {
+                "formula": "cancelados",
+                "alias": "cancelados"
+              }
+            ],
+            "display_type": "bars"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 3,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Duração da saga (ms): média e p95 por desfecho",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "media",
+                "query": "avg:pedido.saga.duracao.avg{$env} by {resultado}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "p95",
+                "query": "avg:pedido.saga.duracao.95percentile{$env} by {resultado}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "media"
+              },
+              {
+                "formula": "p95"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        },
+        "markers": [
+          {
+            "value": "y = 5000",
+            "display_type": "error dashed",
+            "label": "limite do monitor (p95)"
+          }
+        ]
+      },
+      "layout": {
+        "x": 6,
+        "y": 3,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "note",
+        "content": "Estoque (estoque-service)",
+        "background_color": "gray",
+        "font_size": "16",
+        "text_align": "left",
+        "vertical_align": "center",
+        "show_tick": false,
+        "tick_edge": "left",
+        "tick_pos": "50%",
+        "has_padding": true
+      },
+      "layout": {
+        "x": 0,
+        "y": 6,
+        "width": 12,
+        "height": 1
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Reservas por resultado",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "sum:estoque.reserva{$env} by {resultado}.as_count()"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ],
+            "display_type": "bars"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 7,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Compensações e conflitos de lock otimista",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "comp",
+                "query": "sum:estoque.compensacao{$env}.as_count()"
+              },
+              {
+                "data_source": "metrics",
+                "name": "lock",
+                "query": "sum:estoque.lock.conflito{$env}.as_count()"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "comp",
+                "alias": "compensações"
+              },
+              {
+                "formula": "lock",
+                "alias": "conflitos de lock"
+              }
+            ],
+            "display_type": "bars"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        }
+      },
+      "layout": {
+        "x": 4,
+        "y": 7,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Falhas de reserva por motivo",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "sum:estoque.reserva{$env,!resultado:sucesso} by {resultado}.as_count()",
+                "aggregator": "sum"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ],
+            "sort": {
+              "count": 10,
+              "order_by": [
+                {
+                  "type": "formula",
+                  "index": 0,
+                  "order": "desc"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "layout": {
+        "x": 8,
+        "y": 7,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "note",
+        "content": "API: gateway e serviços",
+        "background_color": "gray",
+        "font_size": "16",
+        "text_align": "left",
+        "vertical_align": "center",
+        "show_tick": false,
+        "tick_edge": "left",
+        "tick_pos": "50%",
+        "has_padding": true
+      },
+      "layout": {
+        "x": 0,
+        "y": 10,
+        "width": 12,
+        "height": 1
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Requisições por serviço",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "sum:http.server.requests.count{$env,$service} by {service}.as_count()"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ],
+            "display_type": "bars"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 11,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Latência p95 (ms) por serviço",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "avg:http.server.requests.95percentile{$env,$service} by {service}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        }
+      },
+      "layout": {
+        "x": 4,
+        "y": 11,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Taxa de 5xx (%) por serviço",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "err",
+                "query": "sum:http.server.requests.count{$env,$service,status:5*} by {service}.as_count()"
+              },
+              {
+                "data_source": "metrics",
+                "name": "tot",
+                "query": "sum:http.server.requests.count{$env,$service} by {service}.as_count()"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "100 * err / tot"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        },
+        "markers": [
+          {
+            "value": "y = 5",
+            "display_type": "error dashed",
+            "label": "limite do monitor"
+          }
+        ]
+      },
+      "layout": {
+        "x": 8,
+        "y": 11,
+        "width": 4,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Tráfego do gateway por rota",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "sum:spring.cloud.gateway.requests.count{$env} by {routeid}.as_count()"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ],
+            "display_type": "bars"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 14,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "toplist",
+        "title": "Gateway: respostas por status",
+        "requests": [
+          {
+            "response_format": "scalar",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "sum:spring.cloud.gateway.requests.count{$env} by {status}.as_count()",
+                "aggregator": "sum"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ],
+            "sort": {
+              "count": 10,
+              "order_by": [
+                {
+                  "type": "formula",
+                  "index": 0,
+                  "order": "desc"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "layout": {
+        "x": 6,
+        "y": 14,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "note",
+        "content": "Infraestrutura (JVM, banco, Kafka)",
+        "background_color": "gray",
+        "font_size": "16",
+        "text_align": "left",
+        "vertical_align": "center",
+        "show_tick": false,
+        "tick_edge": "left",
+        "tick_pos": "50%",
+        "has_padding": true
+      },
+      "layout": {
+        "x": 0,
+        "y": 17,
+        "width": 12,
+        "height": 1
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Heap da JVM (%)",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "usado",
+                "query": "avg:jvm.heap_memory{$env,$service} by {service}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "maximo",
+                "query": "avg:jvm.heap_memory_max{$env,$service} by {service}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "100 * usado / maximo"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        },
+        "markers": [
+          {
+            "value": "y = 90",
+            "display_type": "error dashed",
+            "label": "limite do monitor"
+          }
+        ]
+      },
+      "layout": {
+        "x": 0,
+        "y": 18,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Threads da JVM",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "avg:jvm.thread_count{$env,$service} by {service}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        }
+      },
+      "layout": {
+        "x": 6,
+        "y": 18,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Pool de conexões do Postgres (HikariCP)",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "ativas",
+                "query": "max:hikaricp.connections.active{$env,$service} by {service}"
+              },
+              {
+                "data_source": "metrics",
+                "name": "pendentes",
+                "query": "max:hikaricp.connections.pending{$env,$service} by {service}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "ativas",
+                "alias": "ativas"
+              },
+              {
+                "formula": "pendentes",
+                "alias": "aguardando conexão"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 21,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "timeseries",
+        "title": "Lag máximo do consumer Kafka (mensagens)",
+        "show_legend": true,
+        "legend_layout": "auto",
+        "requests": [
+          {
+            "response_format": "timeseries",
+            "queries": [
+              {
+                "data_source": "metrics",
+                "name": "a",
+                "query": "max:kafka.consumer.fetch.manager.records.lag.max{$env,$service} by {service}"
+              }
+            ],
+            "formulas": [
+              {
+                "formula": "a"
+              }
+            ],
+            "display_type": "line"
+          }
+        ],
+        "yaxis": {
+          "include_zero": true
+        }
+      },
+      "layout": {
+        "x": 6,
+        "y": 21,
+        "width": 6,
+        "height": 3
+      }
+    },
+    {
+      "definition": {
+        "type": "note",
+        "content": "Logs e rastreamento",
+        "background_color": "gray",
+        "font_size": "16",
+        "text_align": "left",
+        "vertical_align": "center",
+        "show_tick": false,
+        "tick_edge": "left",
+        "tick_pos": "50%",
+        "has_padding": true
+      },
+      "layout": {
+        "x": 0,
+        "y": 24,
+        "width": 12,
+        "height": 1
+      }
+    },
+    {
+      "definition": {
+        "type": "log_stream",
+        "title": "Logs de warn/error",
+        "indexes": [],
+        "query": "env:$env.value service:$service.value status:(warn OR error)",
+        "columns": [],
+        "show_date_column": true,
+        "show_message_column": true,
+        "message_display": "expanded-md",
+        "sort": {
+          "column": "time",
+          "order": "desc"
+        }
+      },
+      "layout": {
+        "x": 0,
+        "y": 25,
+        "width": 8,
+        "height": 4
+      }
+    },
+    {
+      "definition": {
+        "type": "note",
+        "content": "**Achar o trace de um pedido**\n\nAPM > Traces e busque `@pedido.id:<uuid>`. A tag fica no span de entrada (requisição HTTP ou consumo Kafka) de cada serviço.\n\n**De log para trace**\n\nAbra um log e use *View trace*: o `dd.trace_id` já vai no JSON.\n\n**Spans de estoque**\n\n`estoque.reservar_item`, `estoque.repor_item` e `estoque.compensar` aparecem dentro do trace do consumo de `pedido-criado`.",
+        "background_color": "white",
+        "font_size": "14",
+        "text_align": "left",
+        "vertical_align": "top",
+        "show_tick": false,
+        "tick_edge": "left",
+        "tick_pos": "50%",
+        "has_padding": true
+      },
+      "layout": {
+        "x": 8,
+        "y": 25,
+        "width": 4,
+        "height": 4
+      }
+    }
+  ]
+}

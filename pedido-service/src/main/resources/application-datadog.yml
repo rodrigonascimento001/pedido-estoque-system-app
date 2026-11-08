@@ -1,0 +1,29 @@
+# Ativado com SPRING_PROFILES_ACTIVE=datadog
+# Métricas Micrometer -> DogStatsD do Datadog Agent (UDP 8125).
+# Traces e injeção de trace_id nos logs vêm do dd-java-agent (variáveis DD_*).
+management:
+  statsd:
+    metrics:
+      export:
+        enabled: true
+        flavor: datadog
+        host: ${DD_AGENT_HOST:localhost}
+        port: ${DD_DOGSTATSD_PORT:8125}
+  metrics:
+    # Tags comuns: só as de baixíssima cardinalidade. "version" fica de fora de propósito
+    # (cada deploy criaria um conjunto novo de séries); ela continua no APM e nos logs via DD_VERSION.
+    tags:
+      service: ${spring.application.name}
+      env: ${DD_ENV:local}
+    # Allowlist: cada métrica enviada vira série (e custo) no Datadog. Tudo desligado por padrão;
+    # só passa o que está listado (o prefixo vale para todas as métricas filhas).
+    # Métrica nova fora destes prefixos NÃO aparece no Datadog até ser liberada aqui.
+    # JVM: vem do agente (DD_RUNTIME_METRICS_ENABLED), por isso "jvm" não é liberado aqui.
+    enable:
+      all: false
+      pedido: true                     # métricas de negócio (pedido.criado, pedido.saga.duracao...)
+      http.server.requests: true       # latência/erros da API (uri já vem como template)
+      hikaricp: true                   # pool de conexões do Postgres
+      # Kafka: só o lag do consumer (client.id é a única tag). As demais métricas dos clients
+      # têm tags por topic/partition/node e geram centenas de séries; use a integração Kafka do Datadog.
+      kafka.consumer.fetch.manager.records.lag.max: true

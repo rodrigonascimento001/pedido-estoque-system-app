@@ -1,0 +1,22 @@
+{
+  "name": "[Pedidos/Estoque] Taxa de 5xx alta",
+  "type": "query alert",
+  "query": "sum(last_5m):100 * sum:http.server.requests.count{status:5*} by {service}.as_count() / sum:http.server.requests.count{*} by {service}.as_count() > 5",
+  "message": "**{{service.name}}** está retornando mais de 5% de respostas 5xx nos últimos 5 min.\n\nVeja os logs de erro do serviço e os traces com erro no APM.",
+  "tags": [
+    "system:pedido-estoque",
+    "managed-by:json"
+  ],
+  "priority": 2,
+  "options": {
+    "thresholds": {
+      "critical": 5,
+      "warning": 2
+    },
+    "notify_no_data": false,
+    "require_full_window": false,
+    "include_tags": true,
+    "renotify_interval": 60,
+    "new_group_delay": 60
+  }
+}

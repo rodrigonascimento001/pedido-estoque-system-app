@@ -1,0 +1,6 @@
+**/target/
+.git/
+.idea/
+.vscode/
+*.iml
+../../repos/pedido-estoque-system-infra/.env

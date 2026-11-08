@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="appName" source="spring.application.name"/>
+
+    <!-- Perfil "datadog": logs em JSON (1 linha por evento). O dd-java-agent injeta
+         dd.trace_id e dd.span_id no MDC (DD_LOGS_INJECTION=true) e o LogstashEncoder
+         inclui o MDC no JSON, o que permite pular de um log para o trace no Datadog. -->
+    <springProfile name="datadog">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <customFields>{"service":"${appName}"}</customFields>
+                <fieldNames>
+                    <timestamp>timestamp</timestamp>
+                    <version>[ignore]</version>
+                </fieldNames>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+    <!-- Demais perfis (dev local, testes): saída padrão do Spring Boot -->
+    <springProfile name="!datadog">
+        <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+</configuration>

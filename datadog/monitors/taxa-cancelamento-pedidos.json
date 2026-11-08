@@ -1,0 +1,22 @@
+{
+  "name": "[Pedidos/Estoque] Taxa de cancelamento de pedidos alta",
+  "type": "query alert",
+  "query": "sum(last_15m):100 * sum:pedido.cancelado{*}.as_count() / ( sum:pedido.cancelado{*}.as_count() + sum:pedido.confirmado{*}.as_count() ) > 20",
+  "message": "{{#is_alert}}Mais de 20% dos pedidos dos últimos 15 min foram cancelados.{{/is_alert}}\n{{#is_warning}}Cancelamentos acima de 10% nos últimos 15 min.{{/is_warning}}\n\nCausas prováveis: estoque zerado/produto não cadastrado (veja `estoque.reserva` por `resultado`) ou falha no estoque-service.\nCom pouco volume de pedidos a taxa oscila muito; ajuste a janela se for o caso.",
+  "tags": [
+    "system:pedido-estoque",
+    "managed-by:json"
+  ],
+  "priority": 2,
+  "options": {
+    "thresholds": {
+      "critical": 20,
+      "warning": 10
+    },
+    "notify_no_data": false,
+    "require_full_window": false,
+    "include_tags": true,
+    "renotify_interval": 60,
+    "new_group_delay": 60
+  }
+}

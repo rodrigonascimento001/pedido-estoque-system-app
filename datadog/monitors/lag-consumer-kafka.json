@@ -1,0 +1,22 @@
+{
+  "name": "[Pedidos/Estoque] Lag do consumer Kafka alto",
+  "type": "query alert",
+  "query": "avg(last_10m):max:kafka.consumer.fetch.manager.records.lag.max{*} by {service} > 500",
+  "message": "O consumer de **{{service.name}}** está atrasado (lag máximo acima do limite).\n\nEventos de pedido/estoque estão sendo processados com atraso: pedidos ficam PENDENTE por mais tempo.",
+  "tags": [
+    "system:pedido-estoque",
+    "managed-by:json"
+  ],
+  "priority": 3,
+  "options": {
+    "thresholds": {
+      "critical": 500,
+      "warning": 100
+    },
+    "notify_no_data": false,
+    "require_full_window": false,
+    "include_tags": true,
+    "renotify_interval": 60,
+    "new_group_delay": 60
+  }
+}
