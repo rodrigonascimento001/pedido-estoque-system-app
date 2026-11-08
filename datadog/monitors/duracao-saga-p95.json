@@ -1,0 +1,22 @@
+{
+  "name": "[Pedidos/Estoque] Duração da saga (p95) alta",
+  "type": "query alert",
+  "query": "avg(last_10m):avg:pedido.saga.duracao.95percentile{*} > 5000",
+  "message": "A saga (pedido criado até a resposta do estoque) está com p95 acima de 5 s.\n\nVerifique o lag do consumer Kafka, a latência do Postgres do estoque e conflitos de lock (`estoque.lock.conflito`). No APM, abra o trace do consumo de `pedido-criado`.",
+  "tags": [
+    "system:pedido-estoque",
+    "managed-by:json"
+  ],
+  "priority": 2,
+  "options": {
+    "thresholds": {
+      "critical": 5000,
+      "warning": 2000
+    },
+    "notify_no_data": false,
+    "require_full_window": false,
+    "include_tags": true,
+    "renotify_interval": 60,
+    "new_group_delay": 60
+  }
+}
