@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.kafka.test.utils.KafkaTestUtils;
 
 import java.math.BigDecimal;
@@ -21,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +41,9 @@ class PedidoEventConsumerIntegrationTest extends IntegrationTestBase {
     @Autowired
     private EstoqueRepository estoqueRepository;
 
+    @Autowired
+    private KafkaListenerEndpointRegistry listenerRegistry;
+
     private KafkaConsumer<String, String> testConsumer;
 
     @BeforeEach
@@ -50,6 +56,15 @@ class PedidoEventConsumerIntegrationTest extends IntegrationTestBase {
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         testConsumer = new KafkaConsumer<>(props);
         testConsumer.subscribe(List.of("estoque-reservado", "estoque-indisponivel"));
+
+        // Aguarda o listener de entrada e o consumer de verificação receberem
+        // suas partições antes de publicar, evitando perda por corrida de startup.
+        ContainerTestUtils.waitForAssignment(
+                listenerRegistry.getListenerContainer("estoque-pedido-consumer"), 1);
+        Awaitility.await().atMost(Duration.ofSeconds(15)).untilAsserted(() -> {
+            testConsumer.poll(Duration.ofMillis(100));
+            assertThat(testConsumer.assignment()).isNotEmpty();
+        });
     }
 
     @AfterEach
@@ -58,7 +73,7 @@ class PedidoEventConsumerIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void deveReservarEPublicarEstoqueReservadoQuandoHaSaldo() {
+    void deveReservarEPublicarEstoqueReservadoQuandoHaSaldo() throws Exception {
         UUID produtoId = UUID.randomUUID();
         estoqueRepository.save(new Estoque(produtoId, 5));
 
@@ -67,10 +82,10 @@ class PedidoEventConsumerIntegrationTest extends IntegrationTestBase {
                 List.of(new PedidoCriadoEvent.ItemPedido(produtoId, 2, BigDecimal.valueOf(15))),
                 Instant.now());
 
-        kafkaTemplate.send("pedido-criado", pedidoId.toString(), evento);
+        kafkaTemplate.send("pedido-criado", pedidoId.toString(), evento).get(10, TimeUnit.SECONDS);
 
         ConsumerRecord<String, String> record =
-                KafkaTestUtils.getSingleRecord(testConsumer, "estoque-reservado", Duration.ofSeconds(15));
+                KafkaTestUtils.getSingleRecord(testConsumer, "estoque-reservado", Duration.ofSeconds(30));
 
         assertThat(record.key()).isEqualTo(pedidoId.toString());
         Awaitility.await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
@@ -79,7 +94,7 @@ class PedidoEventConsumerIntegrationTest extends IntegrationTestBase {
     }
 
     @Test
-    void devePublicarEstoqueIndisponivelQuandoSaldoInsuficiente() {
+    void devePublicarEstoqueIndisponivelQuandoSaldoInsuficiente() throws Exception {
         UUID produtoId = UUID.randomUUID();
         estoqueRepository.save(new Estoque(produtoId, 1));
 
@@ -88,10 +103,10 @@ class PedidoEventConsumerIntegrationTest extends IntegrationTestBase {
                 List.of(new PedidoCriadoEvent.ItemPedido(produtoId, 5, BigDecimal.valueOf(15))),
                 Instant.now());
 
-        kafkaTemplate.send("pedido-criado", pedidoId.toString(), evento);
+        kafkaTemplate.send("pedido-criado", pedidoId.toString(), evento).get(10, TimeUnit.SECONDS);
 
         ConsumerRecord<String, String> record =
-                KafkaTestUtils.getSingleRecord(testConsumer, "estoque-indisponivel", Duration.ofSeconds(15));
+                KafkaTestUtils.getSingleRecord(testConsumer, "estoque-indisponivel", Duration.ofSeconds(30));
 
         assertThat(record.key()).isEqualTo(pedidoId.toString());
         assertThat(record.value()).contains(produtoId.toString());

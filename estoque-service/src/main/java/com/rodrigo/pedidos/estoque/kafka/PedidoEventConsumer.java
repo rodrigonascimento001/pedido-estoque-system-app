@@ -23,7 +23,7 @@ public class PedidoEventConsumer {
         this.estoqueService = estoqueService;
     }
 
-    @KafkaListener(topics = KafkaTopics.PEDIDO_CRIADO, groupId = "estoque-service")
+    @KafkaListener(id = "estoque-pedido-consumer", topics = KafkaTopics.PEDIDO_CRIADO, groupId = "estoque-service")
     public void aoCriarPedido(PedidoCriadoEvent evento) {
         log.info("Processando reserva de estoque para pedido {}", evento.pedidoId());
         estoqueService.processarPedido(evento);
