@@ -10,6 +10,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.*;
  * o foco é validar o estado do estoque, não a integração com o broker
  * (isso é coberto por PedidoEventConsumerIntegrationTest).
  */
+@TestPropertySource(properties = "spring.kafka.listener.auto-startup=false")
 class EstoqueServiceIntegrationTest extends IntegrationTestBase {
 
     @Autowired
