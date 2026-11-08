@@ -1,0 +1,83 @@
+name: pedido-estoque-app
+
+# Infrastructure lives in the separate pedido-estoque-system-infra repository.
+# Start that Compose project first; it creates this shared network and the
+# kafka, postgres-pedidos, postgres-estoque, and redis DNS names used below.
+x-datadog-env: &datadog-env
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+  DD_ENV: ${DD_ENV:-local}
+  DD_VERSION: ${DD_VERSION:-local}
+  DD_AGENT_HOST: ${DD_AGENT_HOST:-datadog-agent}
+  DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
+  DD_LOGS_INJECTION: "true"
+  DD_RUNTIME_METRICS_ENABLED: "true"
+  DD_TRACE_SAMPLE_RATE: "1"
+
+services:
+  pedido-service:
+    build:
+      context: .
+      args:
+        MODULE: pedido-service
+    environment:
+      <<: *datadog-env
+      DD_SERVICE: pedido-service
+      DB_HOST: postgres-pedidos
+      DB_NAME: pedidos_db
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "java", "service": "pedido-service"}]'
+    ports:
+      - "8081:8081"
+    networks:
+      - pedido-estoque-network
+
+  estoque-service:
+    build:
+      context: .
+      args:
+        MODULE: estoque-service
+    environment:
+      <<: *datadog-env
+      DD_SERVICE: estoque-service
+      DB_HOST: postgres-estoque
+      DB_NAME: estoque_db
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "java", "service": "estoque-service"}]'
+    ports:
+      - "8082:8082"
+    networks:
+      - pedido-estoque-network
+
+  api-gateway:
+    build:
+      context: .
+      args:
+        MODULE: api-gateway
+    depends_on:
+      pedido-service:
+        condition: service_started
+      estoque-service:
+        condition: service_started
+    environment:
+      <<: *datadog-env
+      DD_SERVICE: api-gateway
+      REDIS_HOST: redis
+      PEDIDO_SERVICE_URI: http://pedido-service:8081
+      ESTOQUE_SERVICE_URI: http://estoque-service:8082
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "java", "service": "api-gateway"}]'
+    ports:
+      - "8080:8080"
+    networks:
+      - pedido-estoque-network
+
+networks:
+  pedido-estoque-network:
+    external: true
+    name: pedido-estoque-network
