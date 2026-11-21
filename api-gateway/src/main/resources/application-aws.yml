@@ -1,0 +1,12 @@
+# Ativado com SPRING_PROFILES_ACTIVE=aws (ou aws,datadog).
+# O gateway não possui banco; importa apenas os toggles globais.
+spring:
+  config:
+    import:
+      - optional:aws-parameterstore:/pedido-estoque/${APP_ENV:local}/common/
+
+# Default quando o parâmetro não existe. O import opcional do Parameter Store
+# tem precedência e sobrescreve este valor quando a chave está publicada.
+features:
+  datadog:
+    enabled: false

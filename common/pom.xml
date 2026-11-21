@@ -29,5 +29,16 @@
             <groupId>io.opentracing</groupId>
             <artifactId>opentracing-util</artifactId>
         </dependency>
+        <!-- Config data imports: Secrets Manager (obrigatório no perfil aws) e
+             Parameter Store (toggles globais opcionais). Os starters não acessam
+             a AWS sem um spring.config.import ativo. -->
+        <dependency>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-secrets-manager</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.awspring.cloud</groupId>
+            <artifactId>spring-cloud-aws-starter-parameter-store</artifactId>
+        </dependency>
     </dependencies>
 </project>
