@@ -12,6 +12,7 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration;
 import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
+import org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Import;
@@ -95,7 +96,8 @@ class AwsConfigDataIntegrationTest {
     @EnableAutoConfiguration(exclude = {
             HibernateJpaAutoConfiguration.class,
             JpaRepositoriesAutoConfiguration.class,
-            KafkaAutoConfiguration.class
+            KafkaAutoConfiguration.class,
+            FlywayAutoConfiguration.class
     })
     @Import(AwsDbSecretValidationConfiguration.class)
     static class TestApplication {

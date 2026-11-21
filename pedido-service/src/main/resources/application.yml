@@ -11,11 +11,15 @@ spring:
     password: ${DB_PASSWORD:postgres}
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
         format_sql: true
+
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 1
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -31,6 +35,18 @@ spring:
         spring.json.trusted.packages: "com.rodrigo.pedidos.comum.events"
         # JsonSerializer/JsonDeserializer usam o header __TypeId__ por padrão
         # para mapear a classe correta em cada tópico (estoque-reservado vs estoque-indisponivel).
+
+app:
+  outbox:
+    enabled: ${OUTBOX_ENABLED:true}
+    poll-delay-ms: ${OUTBOX_POLL_DELAY_MS:1000}
+    batch-size: ${OUTBOX_BATCH_SIZE:25}
+    lease-ms: ${OUTBOX_LEASE_MS:30000}
+    send-timeout-ms: ${OUTBOX_SEND_TIMEOUT_MS:10000}
+  kafka:
+    retry:
+      max-attempts: ${KAFKA_RETRY_MAX_ATTEMPTS:3}
+      backoff-ms: ${KAFKA_RETRY_BACKOFF_MS:2000}
 
 management:
   endpoints:

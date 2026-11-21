@@ -72,15 +72,23 @@ public class Pedido {
         this.itens.add(item);
     }
 
-    public void confirmar() {
+    public boolean confirmar() {
+        if (this.status != StatusPedido.PENDENTE) {
+            return false;
+        }
         this.status = StatusPedido.CONFIRMADO;
         this.atualizadoEm = Instant.now();
+        return true;
     }
 
-    public void cancelar(String motivo) {
+    public boolean cancelar(String motivo) {
+        if (this.status != StatusPedido.PENDENTE) {
+            return false;
+        }
         this.status = StatusPedido.CANCELADO;
         this.motivoCancelamento = motivo;
         this.atualizadoEm = Instant.now();
+        return true;
     }
 
     public BigDecimal valorTotal() {

@@ -42,8 +42,8 @@ public class PedidoService {
         // tag no span de entrada (requisição HTTP): permite buscar o trace por pedido.id no APM
         SpanTags.tagEntrada("pedido.id", pedido.getId());
 
-        // Publicado após o commit seria ideal (outbox pattern); aqui simplificado
-        // e publicado logo após o save para manter o exemplo direto.
+        // O producer grava o evento no outbox na mesma transação do pedido;
+        // o relay só o envia ao Kafka depois que o commit estiver concluído.
         pedidoEventProducer.publicarPedidoCriado(pedido);
 
         // Métrica de negócio: nunca usar pedidoId como tag (cardinalidade ilimitada

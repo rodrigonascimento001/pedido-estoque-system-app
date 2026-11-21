@@ -2,135 +2,166 @@ package com.rodrigo.pedidos.estoque.service;
 
 import com.rodrigo.pedidos.comum.events.PedidoCriadoEvent;
 import com.rodrigo.pedidos.estoque.domain.Estoque;
-import com.rodrigo.pedidos.estoque.domain.ResultadoReserva;
-import com.rodrigo.pedidos.estoque.kafka.EstoqueEventProducer;
 import com.rodrigo.pedidos.estoque.repository.EstoqueRepository;
 import com.rodrigo.pedidos.estoque.support.IntegrationTestBase;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
 
-/**
- * Exercita a regra de negócio central (reserva + compensação) contra um
- * Postgres real via Testcontainers. O producer Kafka é mockado aqui porque
- * o foco é validar o estado do estoque, não a integração com o broker
- * (isso é coberto por PedidoEventConsumerIntegrationTest).
- */
-@TestPropertySource(properties = "spring.kafka.listener.auto-startup=false")
+@TestPropertySource(properties = {"spring.kafka.listener.auto-startup=false", "app.outbox.enabled=false"})
 class EstoqueServiceIntegrationTest extends IntegrationTestBase {
 
-    @Autowired
-    private EstoqueService estoqueService;
-
-    @Autowired
-    private ReservaEstoqueService reservaEstoqueService;
-
-    @Autowired
-    private EstoqueRepository estoqueRepository;
-
-    @Autowired
-    private MeterRegistry meterRegistry;
-
-    @MockBean
-    private EstoqueEventProducer estoqueEventProducer;
+    @Autowired private EstoqueService estoqueService;
+    @Autowired private EstoqueRepository estoqueRepository;
+    @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private MeterRegistry meterRegistry;
 
     @Test
-    void deveReservarQuandoHaSaldoSuficiente() {
-        UUID produtoId = UUID.randomUUID();
-        estoqueRepository.save(new Estoque(produtoId, 10));
-
-        ResultadoReserva resultado = reservaEstoqueService.reservar(produtoId, 4);
-
-        assertThat(resultado.reservou()).isTrue();
-        // lido em nova consulta: prova que a transação foi realmente commitada
-        Estoque atualizado = estoqueRepository.findById(produtoId).orElseThrow();
-        assertThat(atualizado.getQuantidadeDisponivel()).isEqualTo(6);
-    }
-
-    @Test
-    void deveRetornarSaldoInsuficienteSemAlterarEstoque() {
-        UUID produtoId = UUID.randomUUID();
-        estoqueRepository.save(new Estoque(produtoId, 2));
-
-        ResultadoReserva resultado = reservaEstoqueService.reservar(produtoId, 5);
-
-        // falha de negócio é resultado, não exceção (não vira "erro" no span do APM)
-        assertThat(resultado.tipo()).isEqualTo(ResultadoReserva.Tipo.SALDO_INSUFICIENTE);
-        assertThat(resultado.motivo()).contains(produtoId.toString());
-        // saldo não deve ter sido alterado
-        assertThat(estoqueRepository.findById(produtoId).orElseThrow().getQuantidadeDisponivel()).isEqualTo(2);
-    }
-
-    @Test
-    void deveRetornarProdutoInexistenteQuandoNaoHaEstoqueCadastrado() {
-        UUID produtoId = UUID.randomUUID();
-
-        ResultadoReserva resultado = reservaEstoqueService.reservar(produtoId, 1);
-
-        assertThat(resultado.tipo()).isEqualTo(ResultadoReserva.Tipo.PRODUTO_INEXISTENTE);
-    }
-
-    @Test
-    void deveConfirmarReservaQuandoTodosOsItensTemSaldo() {
+    void deveReservarTodosOsItensEmUmaUnicaOperacao() {
         UUID produtoA = UUID.randomUUID();
         UUID produtoB = UUID.randomUUID();
         estoqueRepository.save(new Estoque(produtoA, 10));
         estoqueRepository.save(new Estoque(produtoB, 10));
+        UUID pedidoId = UUID.randomUUID();
 
-        var pedidoId = UUID.randomUUID();
-        var evento = new PedidoCriadoEvent(pedidoId, List.of(
-                new PedidoCriadoEvent.ItemPedido(produtoA, 3, BigDecimal.TEN),
-                new PedidoCriadoEvent.ItemPedido(produtoB, 2, BigDecimal.TEN)
-        ), Instant.now());
+        estoqueService.processarPedido(evento(pedidoId,
+                item(produtoA, 3), item(produtoB, 2)));
 
-        estoqueService.processarPedido(evento);
-
-        assertThat(estoqueRepository.findById(produtoA).orElseThrow().getQuantidadeDisponivel()).isEqualTo(7);
-        assertThat(estoqueRepository.findById(produtoB).orElseThrow().getQuantidadeDisponivel()).isEqualTo(8);
-        verify(estoqueEventProducer).publicarReservado(pedidoId);
-        verify(estoqueEventProducer, never()).publicarIndisponivel(any(), any(), any());
+        assertThat(saldo(produtoA)).isEqualTo(7);
+        assertThat(saldo(produtoB)).isEqualTo(8);
+        assertThat(resultado(pedidoId)).isEqualTo("RESERVADO");
+        assertThat(outboxCount(pedidoId)).isEqualTo(1);
     }
 
     @Test
-    void deveCompensarReservasJaFeitasQuandoUmItemFalha() {
-        UUID produtoComSaldo = UUID.randomUUID();
-        UUID produtoSemSaldo = UUID.randomUUID();
-        estoqueRepository.save(new Estoque(produtoComSaldo, 10));
-        estoqueRepository.save(new Estoque(produtoSemSaldo, 1));
-
-        double compensacoesAntes = meterRegistry.counter("estoque.compensacao").count();
+    void deveDeixarTodosOsSaldosIntactosSeQualquerItemNaoTiverSaldo() {
+        UUID produtoA = UUID.randomUUID();
+        UUID produtoB = UUID.randomUUID();
+        estoqueRepository.save(new Estoque(produtoA, 10));
+        estoqueRepository.save(new Estoque(produtoB, 1));
+        UUID pedidoId = UUID.randomUUID();
         double falhasAntes = meterRegistry.counter("estoque.reserva", "resultado", "saldo_insuficiente").count();
 
-        var pedidoId = UUID.randomUUID();
-        // primeiro item reserva com sucesso, segundo falha -> deve reverter o primeiro
-        var evento = new PedidoCriadoEvent(pedidoId, List.of(
-                new PedidoCriadoEvent.ItemPedido(produtoComSaldo, 3, BigDecimal.TEN),
-                new PedidoCriadoEvent.ItemPedido(produtoSemSaldo, 5, BigDecimal.TEN)
-        ), Instant.now());
+        estoqueService.processarPedido(evento(pedidoId,
+                item(produtoA, 3), item(produtoB, 5)));
 
-        estoqueService.processarPedido(evento);
-
-        // saldo do primeiro produto deve ter voltado ao original (compensação)
-        assertThat(estoqueRepository.findById(produtoComSaldo).orElseThrow().getQuantidadeDisponivel()).isEqualTo(10);
-        assertThat(estoqueRepository.findById(produtoSemSaldo).orElseThrow().getQuantidadeDisponivel()).isEqualTo(1);
-        verify(estoqueEventProducer).publicarIndisponivel(eq(pedidoId), eq(List.of(produtoSemSaldo)), any());
-        verify(estoqueEventProducer, never()).publicarReservado(any());
-
-        // métricas de negócio: 1 item compensado e 1 falha por saldo insuficiente
-        assertThat(meterRegistry.counter("estoque.compensacao").count()).isEqualTo(compensacoesAntes + 1);
+        assertThat(saldo(produtoA)).isEqualTo(10);
+        assertThat(saldo(produtoB)).isEqualTo(1);
+        assertThat(resultado(pedidoId)).isEqualTo("INDISPONIVEL");
+        assertThat(outboxCount(pedidoId)).isEqualTo(1);
         assertThat(meterRegistry.counter("estoque.reserva", "resultado", "saldo_insuficiente").count())
                 .isEqualTo(falhasAntes + 1);
+    }
+
+    @Test
+    void deveSomarItensRepetidosDoMesmoProdutoAntesDeReservar() {
+        UUID produtoId = UUID.randomUUID();
+        estoqueRepository.save(new Estoque(produtoId, 10));
+        UUID pedidoId = UUID.randomUUID();
+
+        estoqueService.processarPedido(evento(pedidoId, item(produtoId, 2), item(produtoId, 3)));
+
+        assertThat(saldo(produtoId)).isEqualTo(5);
+        assertThat(jdbcTemplate.queryForObject("SELECT quantidade FROM reserva_pedido_item WHERE pedido_id = ? AND produto_id = ?",
+                Integer.class, pedidoId, produtoId)).isEqualTo(5);
+    }
+
+    @Test
+    void entregaDuplicadaNaoDeveReservarNemPublicarNovamente() {
+        UUID produtoId = UUID.randomUUID();
+        estoqueRepository.save(new Estoque(produtoId, 10));
+        UUID pedidoId = UUID.randomUUID();
+        var evento = evento(pedidoId, item(produtoId, 4));
+
+        estoqueService.processarPedido(evento);
+        estoqueService.processarPedido(evento);
+
+        assertThat(saldo(produtoId)).isEqualTo(6);
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM reserva_pedido WHERE pedido_id = ?", Integer.class, pedidoId))
+                .isEqualTo(1);
+        assertThat(outboxCount(pedidoId)).isEqualTo(1);
+    }
+
+    @Test
+    void entregaDuplicadaDeRejeicaoNaoDevePublicarNovamente() {
+        UUID produtoId = UUID.randomUUID();
+        estoqueRepository.save(new Estoque(produtoId, 1));
+        UUID pedidoId = UUID.randomUUID();
+        var evento = evento(pedidoId, item(produtoId, 3));
+
+        estoqueService.processarPedido(evento);
+        estoqueService.processarPedido(evento);
+
+        assertThat(saldo(produtoId)).isEqualTo(1);
+        assertThat(resultado(pedidoId)).isEqualTo("INDISPONIVEL");
+        assertThat(outboxCount(pedidoId)).isEqualTo(1);
+    }
+
+    @Test
+    void eventoDuplicadoComConteudoDiferenteNaoDeveAlterarReserva() {
+        UUID produtoId = UUID.randomUUID();
+        estoqueRepository.save(new Estoque(produtoId, 10));
+        UUID pedidoId = UUID.randomUUID();
+
+        estoqueService.processarPedido(evento(pedidoId, item(produtoId, 2)));
+        estoqueService.processarPedido(evento(pedidoId, item(produtoId, 5)));
+
+        assertThat(saldo(produtoId)).isEqualTo(8);
+        assertThat(outboxCount(pedidoId)).isEqualTo(1);
+        assertThat(meterRegistry.counter("estoque.reserva.idempotency.conflict").count()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void reservasConcorrentesNaoDeixamSaldoNegativoNemParcial() throws Exception {
+        UUID produtoId = UUID.randomUUID();
+        estoqueRepository.save(new Estoque(produtoId, 5));
+        UUID pedidoA = UUID.randomUUID();
+        UUID pedidoB = UUID.randomUUID();
+        var eventoA = evento(pedidoA, item(produtoId, 4));
+        var eventoB = evento(pedidoB, item(produtoId, 4));
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var a = executor.submit(() -> estoqueService.processarPedido(eventoA));
+            var b = executor.submit(() -> estoqueService.processarPedido(eventoB));
+            a.get();
+            b.get();
+        }
+
+        assertThat(saldo(produtoId)).isEqualTo(1);
+        var resultados = jdbcTemplate.queryForList(
+                "SELECT resultado FROM reserva_pedido WHERE pedido_id IN (?, ?)", String.class, pedidoA, pedidoB);
+        assertThat(resultados).containsExactlyInAnyOrder("RESERVADO", "INDISPONIVEL");
+        assertThat(outboxCount(pedidoA) + outboxCount(pedidoB)).isEqualTo(2);
+    }
+
+    private int saldo(UUID produtoId) {
+        return estoqueRepository.findById(produtoId).orElseThrow().getQuantidadeDisponivel();
+    }
+
+    private String resultado(UUID pedidoId) {
+        return jdbcTemplate.queryForObject("SELECT resultado FROM reserva_pedido WHERE pedido_id = ?", String.class, pedidoId);
+    }
+
+    private int outboxCount(UUID pedidoId) {
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM outbox_event WHERE message_key = ?",
+                Integer.class, pedidoId.toString());
+    }
+
+    private PedidoCriadoEvent evento(UUID pedidoId, PedidoCriadoEvent.ItemPedido... itens) {
+        return new PedidoCriadoEvent(pedidoId, List.of(itens), Instant.now());
+    }
+
+    private PedidoCriadoEvent.ItemPedido item(UUID produtoId, int quantidade) {
+        return new PedidoCriadoEvent.ItemPedido(produtoId, quantidade, BigDecimal.TEN);
     }
 }
