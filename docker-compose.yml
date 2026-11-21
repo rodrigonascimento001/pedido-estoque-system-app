@@ -3,8 +3,18 @@ name: pedido-estoque-app
 # Infrastructure lives in the separate pedido-estoque-system-infra repository.
 # Start that Compose project first; it creates this shared network and the
 # kafka, postgres-pedidos, postgres-estoque, and redis DNS names used below.
-x-datadog-env: &datadog-env
+x-common-env: &common-env
   SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-default}
+  APP_ENV: ${APP_ENV:-local}
+  # LocalStack (perfil aws). Para AWS real, remova/ajuste o endpoint e as credenciais.
+  SPRING_CLOUD_AWS_ENDPOINT: ${SPRING_CLOUD_AWS_ENDPOINT:-http://localstack:4566}
+  SPRING_CLOUD_AWS_REGION_STATIC: ${SPRING_CLOUD_AWS_REGION_STATIC:-us-east-1}
+  SPRING_CLOUD_AWS_CREDENTIALS_ACCESS_KEY: ${SPRING_CLOUD_AWS_CREDENTIALS_ACCESS_KEY:-test}
+  SPRING_CLOUD_AWS_CREDENTIALS_SECRET_KEY: ${SPRING_CLOUD_AWS_CREDENTIALS_SECRET_KEY:-test}
+  AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://localstack:4566}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
   DD_ENV: ${DD_ENV:-local}
   DD_VERSION: ${DD_VERSION:-local}
   DD_AGENT_HOST: ${DD_AGENT_HOST:-datadog-agent}
@@ -20,7 +30,7 @@ services:
       args:
         MODULE: pedido-service
     environment:
-      <<: *datadog-env
+      <<: *common-env
       DD_SERVICE: pedido-service
       DB_HOST: postgres-pedidos
       DB_NAME: pedidos_db
@@ -40,7 +50,7 @@ services:
       args:
         MODULE: estoque-service
     environment:
-      <<: *datadog-env
+      <<: *common-env
       DD_SERVICE: estoque-service
       DB_HOST: postgres-estoque
       DB_NAME: estoque_db
@@ -65,7 +75,7 @@ services:
       estoque-service:
         condition: service_started
     environment:
-      <<: *datadog-env
+      <<: *common-env
       DD_SERVICE: api-gateway
       REDIS_HOST: redis
       PEDIDO_SERVICE_URI: http://pedido-service:8081

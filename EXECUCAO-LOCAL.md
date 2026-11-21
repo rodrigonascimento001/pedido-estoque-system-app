@@ -22,6 +22,10 @@ DD_AGENT_HOST=datadog-agent
 DD_TRACE_ENABLED=true
 ```
 
+Para usar segredos e o toggle do Datadog vindos da AWS local (LocalStack), use
+`SPRING_PROFILES_ACTIVE=aws` ou `aws,datadog` e mantenha as variáveis
+`SPRING_CLOUD_AWS_*` do `.env.example`.
+
 O `.env.example` da aplicação contém as demais configurações locais. Copie-o apenas se precisar criar o `.env`:
 
 ```powershell
@@ -44,6 +48,23 @@ O perfil `observability` inclui o Datadog Agent. Acompanhe os logs, se necessár
 
 ```powershell
 docker compose logs -f
+```
+
+### 2.1 Opcional: segredos e toggle via LocalStack
+
+Para exercitar o perfil `aws` localmente, suba também o LocalStack. O profile
+dedicado já cria os segredos e o parâmetro de forma idempotente:
+
+```powershell
+docker compose --profile localstack up -d
+docker compose --profile localstack ps
+```
+
+Confira os recursos:
+
+```powershell
+docker compose --profile localstack exec -T localstack awslocal secretsmanager list-secrets
+docker compose --profile localstack exec -T localstack awslocal ssm get-parameter --name /pedido-estoque/local/common/features.datadog.enabled
 ```
 
 ## 3. Suba a aplicação
