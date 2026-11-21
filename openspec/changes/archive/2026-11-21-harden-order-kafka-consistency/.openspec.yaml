@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-11-21
+goal: Eliminar reservas parciais e perdas de eventos sob retries e duplicatas,
+  definindo um escopo incremental de hardening.
