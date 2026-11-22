@@ -35,6 +35,16 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Precisa vir ANTES do spring-boot-dependencies: em BOMs importados, a primeira
+                 declaração vence. O BOM do Spring Boot 3.2.5 já gerencia o Testcontainers (1.19.7),
+                 então, depois dele, o testcontainers.version daqui não teria efeito nenhum. -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -53,13 +63,6 @@
                 <groupId>io.awspring.cloud</groupId>
                 <artifactId>spring-cloud-aws-dependencies</artifactId>
                 <version>${spring-cloud-aws.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.testcontainers</groupId>
-                <artifactId>testcontainers-bom</artifactId>
-                <version>${testcontainers.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
