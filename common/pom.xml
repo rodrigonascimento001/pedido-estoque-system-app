@@ -29,6 +29,12 @@
             <groupId>io.opentracing</groupId>
             <artifactId>opentracing-util</artifactId>
         </dependency>
+        <!-- BytesPreservingJsonSerializer (pacote comum.kafka). Os serviços que usam o common
+             já dependem do spring-kafka; a versão vem do BOM do Spring Boot. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
         <!-- Config data imports: Secrets Manager (obrigatório no perfil aws) e
              Parameter Store (toggles globais opcionais). Os starters não acessam
              a AWS sem um spring.config.import ativo. -->

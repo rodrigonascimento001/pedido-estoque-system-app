@@ -7,8 +7,8 @@ Implementação inicial da arquitetura esboçada: Client → CDN/LB → API Gate
 
 - **common** — eventos compartilhados (`PedidoCriadoEvent`, `EstoqueReservadoEvent`, `EstoqueIndisponivelEvent`)
 - **api-gateway** — Spring Cloud Gateway: roteamento, autenticação (stub Bearer), rate limit (Redis)
-- **pedido-service** — cria pedidos (status `PENDENTE`), publica `PedidoCriadoEvent`, escuta a resposta do estoque
-- **estoque-service** — reserva estoque (lock otimista), publica `EstoqueReservadoEvent`/`EstoqueIndisponivelEvent`
+- **pedido-service** — cria pedidos (status `PENDENTE`), grava `PedidoCriadoEvent` no outbox transacional, escuta a resposta do estoque
+- **estoque-service** — reserva o estoque de cada pedido de forma atômica e idempotente (uma transação por pedido) e publica `EstoqueReservadoEvent`/`EstoqueIndisponivelEvent` pelo outbox
 
 ## Saga de consistência eventual
 
@@ -17,17 +17,22 @@ pedido-service                    estoque-service
      |  POST /api/pedidos               |
      |  status = PENDENTE                |
      |──── pedido-criado (Kafka) ───────>|
-     |                                   | tenta reservar cada item
-     |                                   | (lock otimista por produto)
+     |                                   | reserva todos os itens numa única
+     |                                   | transação (tudo ou nada)
      |<─── estoque-reservado ────────────| sucesso: status = CONFIRMADO
-     |<─── estoque-indisponivel ─────────| falha: repõe itens já reservados
-     |         status = CANCELADO        | (compensação) e publica falha
+     |<─── estoque-indisponivel ─────────| falha: nada é baixado (rollback)
+     |         status = CANCELADO        | e a recusa é registrada
 ```
 
-> Nota: a publicação do evento hoje ocorre logo após o `save()`, fora de uma
-> transação com o commit do banco. Para produção, evoluir para o
-> **transactional outbox pattern** (tabela outbox + poller/Debezium) evita
-> publicar o evento se o commit falhar.
+> **Consistência.** Os dois serviços usam *transactional outbox*: o evento é gravado na mesma
+> transação do dado de negócio e um relay o publica no Kafka depois do commit (com retry se o
+> broker estiver fora). A entrega é *at-least-once*, então os consumidores são idempotentes:
+> o estoque persiste o resultado por `pedidoId` e ignora mensagens repetidas, e o pedido só
+> transita a partir de `PENDENTE` (evento repetido ou conflitante é ignorado e contado em métrica).
+> Esgotados os retries, o registro fica no DLT, com métrica e alerta, e o pedido permanece
+> `PENDENTE` (não há transição automática). Detalhes e decisões em
+> `openspec/specs/` (`idempotent-inventory-reservation`, `reliable-order-events`,
+> `guarded-order-transitions`).
 
 ## Subindo o ambiente local completo
 
@@ -191,10 +196,10 @@ O que cada suíte cobre:
     muda para `CONFIRMADO` / `CANCELADO` (fecha a ponta da saga sem depender
     do estoque-service estar no ar).
 - **estoque-service**
-  - `EstoqueServiceIntegrationTest` — regra de reserva/compensação contra
-    Postgres real (producer Kafka mockado): saldo suficiente reserva
-    corretamente, saldo insuficiente lança exceção sem alterar o saldo, e um
-    pedido com múltiplos itens onde o 2º falha reverte o 1º já reservado.
+  - `EstoqueServiceIntegrationTest` — regra de reserva contra Postgres real:
+    reserva atômica de todos os itens do pedido (tudo ou nada), recusa sem
+    alterar saldo, linhas repetidas do mesmo produto, mensagem duplicada e
+    reservas concorrentes.
   - `PedidoEventConsumerIntegrationTest` — ponta a ponta via Kafka real:
     publica `pedido-criado` e verifica o evento de resposta (`estoque-reservado`
     ou `estoque-indisponivel`) e o saldo final no banco.
@@ -218,7 +223,11 @@ dentro do compose; em dev local e nos testes o comportamento é o de antes (log 
 | `pedido.confirmado` / `pedido.cancelado` | counter | — | pedido-service |
 | `pedido.saga.duracao` | timer | `resultado` (confirmado/cancelado) | pedido-service — tempo entre criar o pedido e receber a resposta do estoque |
 | `estoque.reserva` | counter | `resultado` (sucesso/saldo_insuficiente/produto_inexistente) | estoque-service |
-| `estoque.compensacao` | counter | — | estoque-service — itens revertidos por falha parcial |
+| `estoque.reserva.idempotency.conflict` | counter | — | estoque-service — mesmo `pedidoId` reentregue com conteúdo diferente |
+| `pedido.transicao.conflito` | counter | `estado_atual`, `estado_recebido` | pedido-service — evento de resultado conflitante com o estado atual do pedido |
+| `pedido.evento.pedido_nao_visivel` | counter | — | pedido-service — resposta do estoque para um pedido que ainda não existe no banco |
+| `kafka.dlt.records` | counter | `service`, `source_topic` | ambos — registros que foram para o DLT (retries esgotados ou mensagem malformada) |
+| `kafka.poison.records` | counter | `service`, `source_topic` | ambos — mensagens malformadas (não desserializam) desviadas direto para o DLT, sem retries |
 
 > Todas as métricas recebem automaticamente as tags `service` e `env`.
 > Não use IDs (pedidoId, produtoId) como tag: a cardinalidade explode e o custo também.
@@ -258,9 +267,7 @@ vale medir ou diagnosticar separadamente. Para dado de contexto, prefira **tag**
 
 | Span / tag | Onde | Por quê |
 |---|---|---|
-| `estoque.reservar_item` (tags `produto.id`, `reserva.quantidade`, `reserva.resultado`) | `ReservaEstoqueService.reservar` | uma reserva por item; mostra qual produto gera contenção |
-| `estoque.repor_item` | `ReservaEstoqueService.repor` | reposição individual na compensação |
-| `estoque.compensar` (tag `compensacao.itens`) | `EstoqueService.compensar` | custo de reverter uma saga com falha parcial |
+| `estoque.processar_pedido` | `EstoqueService.processarPedido` | isola a reserva do pedido inteiro (transação única) dentro do trace do consumo Kafka |
 | tag `pedido.id` no span de entrada | `PedidoService.criar`, consumers Kafka dos dois serviços | achar no APM o trace de um pedido específico |
 
 Convenções: IDs só em tags de span (nunca no nome da operação nem em tag de métrica); falha de
@@ -274,13 +281,16 @@ Pasta `datadog/`:
 
 | Arquivo | O que é |
 |---|---|
-| `dashboard-pedidos-estoque.json` | 25 widgets: saga (criados/confirmados/cancelados, taxa de cancelamento, duração), estoque (reservas por resultado, compensações, lock), API (volume, p95, 5xx, gateway), infra (heap, threads, HikariCP, lag Kafka) e logs de warn/error. Variáveis `env` e `service` no topo. |
+| `dashboard-pedidos-estoque.json` | 25 widgets: saga (criados/confirmados/cancelados, taxa de cancelamento, duração), estoque (reservas por resultado), API (volume, p95, 5xx, gateway), infra (heap, threads, HikariCP, lag Kafka) e logs de warn/error. Variáveis `env` e `service` no topo. |
 | `monitors/taxa-cancelamento-pedidos.json` | cancelados / (cancelados + confirmados) > 20% em 15 min (warning 10%) |
 | `monitors/duracao-saga-p95.json` | p95 da saga > 5 s em 10 min (warning 2 s) |
 | `monitors/lag-consumer-kafka.json` | lag do consumer > 500 por serviço (warning 100) |
 | `monitors/taxa-5xx-servicos.json` | 5xx > 5% por serviço em 5 min (warning 2%) |
 | `monitors/heap-jvm.json` | heap > 90% do máximo por serviço (warning 80%) |
-| `monitors/conflito-lock-estoque.json` | mais de 20 conflitos de lock otimista em 10 min (warning 5) |
+| `monitors/conflito-lock-estoque.json` | **obsoleto**: depende de `estoque.lock.conflito`, métrica que não existe mais desde a reserva atômica. Remover ou substituir (ver backlog em `AGENTS.md`) |
+
+> O dashboard ainda tem um widget que consulta `estoque.compensacao` e `estoque.lock.conflito`,
+> métricas removidas junto com a compensação; ele aparece vazio até ser ajustado (backlog em `AGENTS.md`).
 
 **Importar pela UI**
 
@@ -344,7 +354,7 @@ Pontos de atenção:
 ## Próximos passos sugeridos
 
 - [ ] Autenticação real no gateway (validação JWT — emissor, expiração, escopos)
-- [ ] Transactional outbox no pedido-service e no estoque-service
+- [x] Transactional outbox no pedido-service e no estoque-service
 - [ ] Cache Redis para leitura de pedidos/estoque (reduzir carga no banco primário)
 - [ ] Load balancer / múltiplas réplicas dos serviços (Docker Compose `deploy.replicas` ou k8s)
 - [ ] Réplica de leitura do Postgres para consultas (`GET /api/pedidos/{id}`)
@@ -353,7 +363,6 @@ Pontos de atenção:
 - [ ] Monitor de "saga travada" (pedidos PENDENTE por mais de N minutos); exige uma métrica de gauge com a
   contagem de pendentes, que hoje não existe
 - [x] Spans customizados com `dd-trace-api` (`@Trace`) e tag `pedido.id` nos spans de entrada
-- [ ] Idempotência do consumer `pedido-criado` (tabela de eventos processados): se, esgotados os retries
-  de lock otimista, a exceção chegar ao Kafka, o evento é reentregue e itens já reservados seriam reservados de novo
-- [ ] Pipeline de CI rodando os testes de integração (GitHub Actions com `docker` disponível no runner)
+- [x] Idempotência dos consumers (resultado persistido por `pedidoId` no estoque; transições guardadas no pedido)
+- [x] Pipeline de CI rodando os testes de integração (GitHub Actions: `mvn -B verify` com Testcontainers; `develop` e `main` protegidas por ruleset)
 - [x] Testes de integração com Testcontainers (Kafka + Postgres)
