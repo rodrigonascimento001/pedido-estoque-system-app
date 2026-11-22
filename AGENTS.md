@@ -8,7 +8,7 @@
   nunca *squash*, para as duas branches não divergirem.
 - Mudanças seguem o padrão OpenSpec (`openspec/changes/<nome>/` com proposal, design, specs e tasks;
   arquivadas em `openspec/changes/archive/` com a data, e specs consolidadas em `openspec/specs/`).
-- Não há change ativa no momento.
+- Change ativa: `handle-kafka-poison-messages` (parte de mensagens malformadas do item 5).
 
 ## Follow-up backlog
 
@@ -32,10 +32,10 @@ ficaram fora da change `harden-order-kafka-consistency`, já arquivada.
 4. **DLT replay tool:** provide an operator-facing UI or command-line tool to
    inspect and replay dead-letter records. DLT observability and alerts exist
    (`@DltHandler`, métrica `kafka.dlt.records`, monitor `dlt-kafka`); replay remains an operational follow-up.
-5. **Kafka poison messages and topology:** configure deserialization error
-   handling for malformed payloads (os consumers usam `JsonDeserializer` direto, sem
-   `ErrorHandlingDeserializer`) and explicitly manage topic creation,
-   partitions, and related scaling policy in a separate change.
+5. **Kafka topology:** explicitly manage topic creation, partitions, and related scaling
+   policy in a separate change. (A parte de mensagens malformadas, com
+   `ErrorHandlingDeserializer` e desvio para o DLT, está na change ativa
+   `handle-kafka-poison-messages`.)
 6. **Datadog artifacts out of date:** the dashboard widget "compensações e conflitos de lock" and the
    monitor `monitors/conflito-lock-estoque.json` query `estoque.compensacao` and
    `estoque.lock.conflito`, metrics removed with the atomic reservation. Remove or replace them,
