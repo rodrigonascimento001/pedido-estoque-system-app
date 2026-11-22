@@ -16,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
 import org.springframework.kafka.test.utils.ContainerTestUtils;
-import org.springframework.kafka.test.utils.KafkaTestUtils;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -24,6 +23,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -67,6 +67,27 @@ class PedidoEventConsumerIntegrationTest extends IntegrationTestBase {
         });
     }
 
+    /**
+     * Espera o registro DESTE pedido no tópico. Os containers são singleton e compartilhados entre
+     * as classes de teste (e o outbox de outros testes também publica em estoque-reservado e
+     * estoque-indisponivel), então o consumer com offset "earliest" pode receber registros de
+     * outros pedidos antes do esperado. Filtrar pela chave torna o teste independente da ordem.
+     */
+    private ConsumerRecord<String, String> aguardarRegistroDoPedido(String topico, UUID pedidoId) {
+        AtomicReference<ConsumerRecord<String, String>> encontrado = new AtomicReference<>();
+        Awaitility.await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            for (ConsumerRecord<String, String> candidato : testConsumer.poll(Duration.ofMillis(500)).records(topico)) {
+                if (pedidoId.toString().equals(candidato.key())) {
+                    encontrado.compareAndSet(null, candidato);
+                }
+            }
+            assertThat(encontrado.get())
+                    .as("registro do pedido %s no tópico %s", pedidoId, topico)
+                    .isNotNull();
+        });
+        return encontrado.get();
+    }
+
     @AfterEach
     void tearDown() {
         testConsumer.close();
@@ -84,8 +105,7 @@ class PedidoEventConsumerIntegrationTest extends IntegrationTestBase {
 
         kafkaTemplate.send("pedido-criado", pedidoId.toString(), evento).get(10, TimeUnit.SECONDS);
 
-        ConsumerRecord<String, String> record =
-                KafkaTestUtils.getSingleRecord(testConsumer, "estoque-reservado", Duration.ofSeconds(30));
+        ConsumerRecord<String, String> record = aguardarRegistroDoPedido("estoque-reservado", pedidoId);
 
         assertThat(record.key()).isEqualTo(pedidoId.toString());
         Awaitility.await().atMost(Duration.ofSeconds(5)).untilAsserted(() ->
@@ -105,8 +125,7 @@ class PedidoEventConsumerIntegrationTest extends IntegrationTestBase {
 
         kafkaTemplate.send("pedido-criado", pedidoId.toString(), evento).get(10, TimeUnit.SECONDS);
 
-        ConsumerRecord<String, String> record =
-                KafkaTestUtils.getSingleRecord(testConsumer, "estoque-indisponivel", Duration.ofSeconds(30));
+        ConsumerRecord<String, String> record = aguardarRegistroDoPedido("estoque-indisponivel", pedidoId);
 
         assertThat(record.key()).isEqualTo(pedidoId.toString());
         assertThat(record.value()).contains(produtoId.toString());
