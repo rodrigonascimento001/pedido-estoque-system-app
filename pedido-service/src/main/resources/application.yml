@@ -5,6 +5,14 @@ spring:
   application:
     name: pedido-service
 
+  # Os starters do Spring Cloud AWS (módulo common) criam o SecretsManagerClient mesmo fora do
+  # perfil "aws", e o SDK exige uma região só para instanciar o client (não há chamada de rede).
+  # Sem isto o contexto não sobe em máquina/CI sem ~/.aws ou AWS_REGION. Em produção, AWS_REGION vence.
+  cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:pedidos_db}
     username: ${DB_USER:postgres}

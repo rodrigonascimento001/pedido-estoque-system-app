@@ -17,7 +17,6 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
-import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -32,7 +31,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * pelo estoque-service. Aqui simulamos o estoque-service publicando os eventos
  * diretamente no tópico, sem depender do módulo estoque-service estar no ar.
  */
-@TestPropertySource(properties = "app.kafka.retry.backoff-ms=500")
 class EstoqueEventConsumerIntegrationTest extends IntegrationTestBase {
 
     @Autowired
