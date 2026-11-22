@@ -21,6 +21,8 @@ Hoje `value-deserializer` é `JsonDeserializer`. Quando ele falha, a exceção s
 - **Telemetria via `RetryListener`.** O consumer do DLT (`@DltHandler`) não vê registros malformados: a falha de desserialização acontece antes do listener, também nele. Por isso a contagem acontece no `recovered(...)` do `DefaultErrorHandler`, registrado por uma classe que estende `RetryTopicConfigurationSupport` e usa `configureCustomizers`. Só conta quando a causa é `DeserializationException`; falhas de negócio continuam sendo contadas pelo `@DltHandler`, sem contagem dupla.
 - **Métricas:** `kafka.dlt.records{service,source_topic}` (existente, para manter o monitor `dlt-kafka` funcionando) e `kafka.poison.records{service,source_topic}` (nova, distingue payload inválido de falha de processamento).
 
+- **Nomes dos headers do DLT.** No spring-kafka 3.1.4 o `DeadLetterPublishingRecoverer` grava `kafka_original-topic` e `kafka_exception-message`, não os `kafka_dlt-*` que o `@DltHandler` lia (por isso a tag `source_topic` saía sempre `unknown`). Os `@DltHandler` passam a aceitar os dois conjuntos de nomes.
+
 ## Risks / Trade-offs
 
 - [O comportamento exato do spring-kafka 3.1.x (rota direta ao DLT, bytes preservados, consumo do DLT sem laço) é validado só pelos testes de integração] → Os testes verificam o registro no `<topico>-dlt` com os bytes originais, o contador e o processamento da mensagem válida seguinte.
