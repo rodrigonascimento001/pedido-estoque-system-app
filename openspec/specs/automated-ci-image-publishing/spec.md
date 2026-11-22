@@ -4,7 +4,7 @@
 TBD - created by archiving change automate-ci-ghcr-and-compose-separation. Update Purpose after archive.
 ## Requirements
 ### Requirement: Validate application changes with Maven
-The application repository SHALL run `mvn -B verify` with Java 21 for changes targeting the `develop` and `main` branches. Verification SHALL complete successfully before images can be published.
+The application repository SHALL run `mvn -B verify` with Java 21 for changes targeting the `develop` and `main` branches. Verification SHALL complete successfully before images can be published. The Testcontainers client used by Docker-dependent integration tests SHALL be compatible with the Docker Engine API available on GitHub-hosted runners.
 
 #### Scenario: Change is integrated into develop
 - **WHEN** a change is pushed to or merged into `develop`
@@ -14,6 +14,11 @@ The application repository SHALL run `mvn -B verify` with Java 21 for changes ta
 #### Scenario: Change is integrated into main
 - **WHEN** a change is pushed to or merged into `main`
 - **THEN** the workflow runs the complete Maven verify lifecycle before starting image publication
+
+#### Scenario: Docker-dependent tests run on a hosted runner
+- **WHEN** the Maven verification job runs integration tests that start Testcontainers
+- **THEN** the Testcontainers Docker client uses an API version accepted by the runner's Docker Engine
+- **AND** the tests proceed to their assertions instead of failing during container startup due to an obsolete Docker API version
 
 ### Requirement: Publish application images to private GHCR
 The application repository SHALL publish images for `pedido-service`, `estoque-service`, and `api-gateway` to GitHub Container Registry only for successful changes integrated into `main`. Each image SHALL have an immutable commit-SHA tag and the moving `main` tag. Packages SHALL be private, and workflow permissions SHALL be limited to those needed to read the repository and publish packages.

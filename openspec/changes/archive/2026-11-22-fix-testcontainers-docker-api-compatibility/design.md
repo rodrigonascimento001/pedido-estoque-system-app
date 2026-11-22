@@ -16,6 +16,7 @@ The Maven reactor runs integration tests with Testcontainers 1.19.7. In GitHub A
 ## Decisions
 
 - Upgrade the Testcontainers BOM from 1.19.7 to 1.21.4. This stays on the 1.x API line and its release notes explicitly address compatibility with recent Docker Engine changes.
+- Import `testcontainers-bom` **before** `spring-boot-dependencies`. With imported BOMs the first declaration wins, and Spring Boot 3.2.5 already manages Testcontainers 1.19.7; imported after it, the 1.21.4 override has no effect (confirmed in CI: the first attempt still failed with Docker API 1.32).
 - Keep Docker API negotiation owned by the Testcontainers client. A project-level `docker-java.properties` API pin is an alternative workaround, but it can become stale as runner Docker versions change.
 - Run the full `mvn -B verify` reactor after the upgrade, since both service modules use Testcontainers and CI already gates image publication on this command.
 
