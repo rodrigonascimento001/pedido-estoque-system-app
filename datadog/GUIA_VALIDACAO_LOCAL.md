@@ -137,7 +137,7 @@ Abra um log de aplicação e procure os campos `dd.trace_id` e `dd.span_id`. Qua
 
 O arquivo `datadog/dashboard-pedidos-estoque.json` usa `layout_type: "ordered"` com layout `fixed`. No Datadog, crie um dashboard novo do tipo **Ordered** (em algumas telas/contas aparece como **Timeboard**) e, nesse dashboard, escolha **Configure > Import dashboard JSON**. Não importe o JSON em um dashboard existente do tipo **Free**: a importação substitui o conteúdo, mas não converte o tipo de layout. A API do Datadog também define `layout_type` como `ordered` ou `free` e informa que o tipo não é alterável num dashboard existente.
 
-Importe os arquivos de `datadog/monitors/` individualmente em **Monitors > New Monitor > Import from JSON**. O dashboard fica mais informativo depois que houver tráfego e métricas.
+Importe os arquivos de `datadog/monitors/` individualmente em **Monitors > New Monitor > Import from JSON**. Isso inclui o monitor `dlt-kafka.json`, que alerta quando a aplicação registra eventos em dead-letter topics. O dashboard fica mais informativo depois que houver tráfego e métricas.
 
 O script `datadog/importar.sh` também cria o dashboard e [dashboard-pedidos-estoque.json](dashboard-pedidos-estoque.json)os monitores pela API, mas exige `DD_APP_KEY` além de `DD_API_KEY` e cria novos objetos a cada execução. Para evitar duplicatas, prefira a importação manual na primeira validação.
 

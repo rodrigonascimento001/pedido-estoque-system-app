@@ -5,7 +5,9 @@ management:
   statsd:
     metrics:
       export:
-        enabled: true
+        # Com perfil datadog puro: true. Com perfil aws, application-aws.yml
+        # define false e o Parameter Store sobrescreve quando publicado.
+        enabled: ${features.datadog.enabled:true}
         flavor: datadog
         host: ${DD_AGENT_HOST:localhost}
         port: ${DD_DOGSTATSD_PORT:8125}

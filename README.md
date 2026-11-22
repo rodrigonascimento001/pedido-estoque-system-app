@@ -55,6 +55,91 @@ O Datadog Agent e opcional e pertence ao Compose de infraestrutura. Configure `D
 ## CI e publicação de imagens
 
 O GitHub Actions executa `mvn -B verify` em pull requests e alterações integradas às branches `develop` e `main`. Após uma alteração integrada em `main` passar pela verificação, as imagens privadas de `pedido-service`, `estoque-service` e `api-gateway` são publicadas no GHCR com uma tag baseada no SHA do commit e a tag móvel `main`. Alterações em `develop` não publicam imagens. A publicação não realiza deploy.
+
+## Configuração via AWS (perfil `aws`)
+
+O perfil `aws` (arquivos `application-aws.yml` de cada serviço) carrega segredos e
+parâmetros via Spring Cloud AWS. O comportamento padrão (dev local e testes)
+continua usando `application.yml` e as variáveis `DB_*`; nenhuma chamada à AWS é
+feita sem o perfil `aws` ativo.
+
+### Secrets Manager
+
+| Segredo | Chaves |
+|---|---|
+| `pedido-estoque/{env}/pedido-service/db` | `AWS_DB_URL`, `AWS_DB_USER`, `AWS_DB_PASSWORD` |
+| `pedido-estoque/{env}/estoque-service/db` | `AWS_DB_URL`, `AWS_DB_USER`, `AWS_DB_PASSWORD` |
+
+`{env}` vem de `APP_ENV` (default `local`). O import é **não-opcional**: segredo
+ausente ou chave faltando derruba o startup (`AwsDbSecretValidationConfiguration`).
+O `application-aws.yml` sobrescreve `spring.datasource.*` com `${AWS_DB_*}`
+**sem defaults**. O prefixo `AWS_` é intencional: `DB_HOST`, `DB_USER`,
+`DB_PASSWORD` e `DB_NAME` exportados pelo Compose têm precedência sobre o config
+data import e, sem o prefixo, venceriam o segredo.
+
+### Parameter Store (feature toggle)
+
+| Parâmetro | Valores |
+|---|---|
+| `/pedido-estoque/{env}/common/features.datadog.enabled` | `true` ou `false` |
+
+O import é opcional e o default é `false` quando o parâmetro não existe. O
+`api-gateway` importa apenas esse caminho (não possui banco).
+
+### Matriz de perfis x métricas (StatsD)
+
+| `SPRING_PROFILES_ACTIVE` | Exportação StatsD |
+|---|---|
+| vazio / `default` | desligada |
+| `datadog` | ligada |
+| `aws` | desligada |
+| `aws,datadog` | valor de `features.datadog.enabled` (default `false`) |
+
+O toggle controla **apenas as métricas StatsD** produzidas pela aplicação.
+Tracing, injeção de `trace_id` nos logs e o `dd-java-agent` continuam governados
+pelas variáveis `DD_*` do deploy (`DD_TRACE_ENABLED`, `DD_LOGS_INJECTION`,
+`JAVA_TOOL_OPTIONS`). Alterar o parâmetro exige restart/redeploy para valer;
+mudanças em `DD_*` também exigem restart. Não há controle do agente via SSM.
+
+### LocalStack (desenvolvimento)
+
+No repositório de infraestrutura, suba o LocalStack com o profile dedicado. Os
+segredos e o parâmetro são semeados de forma idempotente:
+
+```powershell
+# pedido-estoque-system-infra
+docker compose --profile localstack up -d
+```
+
+No `.env` da aplicação, use `SPRING_PROFILES_ACTIVE=aws` (ou `aws,datadog`),
+`APP_ENV=local` e as credenciais fictícias já presentes no `.env.example`
+(`SPRING_CLOUD_AWS_ENDPOINT=http://localstack:4566`, região `us-east-1`,
+`test`/`test`). Ao rodar os serviços na máquina host, troque `localstack` por
+`localhost` no endpoint. Sem o perfil `aws`, as variáveis AWS são inofensivas.
+
+### IAM e operação
+
+Permissões mínimas da task role/usuário:
+
+- `secretsmanager:GetSecretValue` nos dois ARNs de segredo do ambiente.
+- `ssm:GetParametersByPath` em `/pedido-estoque/{env}/common/`.
+
+Runbook:
+
+1. Rotacione o segredo no Secrets Manager mantendo as três chaves do JSON.
+2. Reinicie/redeploy os serviços `pedido-service` e `estoque-service`; a leitura
+   do segredo acontece no startup.
+3. Para o toggle, publique o parâmetro com `--overwrite` e reinicie os serviços
+   que você quer afetar.
+4. Confira nos logs `Loading secrets from AWS Secret Manager` e
+   `Loading property from AWS Parameter Store` e valide `/actuator/health`.
+
+Rollback: remova `aws` de `SPRING_PROFILES_ACTIVE` e reinicie. O serviço volta a
+usar o `application.yml` (`DB_*`) e deixa de ler segredo/parâmetro. Alternativa:
+restaure a versão anterior do segredo e reinicie. Em ambos os casos, mantenha o
+`SPRING_PROFILES_ACTIVE` coerente entre os serviços para não misturar origens de
+configuração.
+
 ## Build e execução
 
 ```bash

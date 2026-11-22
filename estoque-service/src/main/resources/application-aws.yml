@@ -1,0 +1,20 @@
+# Ativado com SPRING_PROFILES_ACTIVE=aws (ou aws,datadog).
+# Segredo obrigatório: o startup falha se o segredo estiver ausente ou ilegível.
+# Parâmetros globais: opcionais, com defaults seguros.
+spring:
+  config:
+    import:
+      - aws-secretsmanager:pedido-estoque/${APP_ENV:local}/estoque-service/db
+      - optional:aws-parameterstore:/pedido-estoque/${APP_ENV:local}/common/
+  datasource:
+    # Sem valores default: uma chave ausente no segredo falha o startup em vez
+    # de cair silenciosamente em postgres/postgres.
+    url: ${AWS_DB_URL}
+    username: ${AWS_DB_USER}
+    password: ${AWS_DB_PASSWORD}
+
+# Default quando o parâmetro não existe. O import opcional do Parameter Store
+# tem precedência e sobrescreve este valor quando a chave está publicada.
+features:
+  datadog:
+    enabled: false

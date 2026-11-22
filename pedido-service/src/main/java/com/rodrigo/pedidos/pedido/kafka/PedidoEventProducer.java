@@ -3,22 +3,23 @@ package com.rodrigo.pedidos.pedido.kafka;
 import com.rodrigo.pedidos.comum.events.PedidoCriadoEvent;
 import com.rodrigo.pedidos.pedido.config.KafkaTopics;
 import com.rodrigo.pedidos.pedido.domain.Pedido;
+import com.rodrigo.pedidos.pedido.outbox.OutboxWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.UUID;
 
 @Component
 public class PedidoEventProducer {
 
     private static final Logger log = LoggerFactory.getLogger(PedidoEventProducer.class);
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxWriter outboxWriter;
 
-    public PedidoEventProducer(KafkaTemplate<String, Object> kafkaTemplate) {
-        this.kafkaTemplate = kafkaTemplate;
+    public PedidoEventProducer(OutboxWriter outboxWriter) {
+        this.outboxWriter = outboxWriter;
     }
 
     public void publicarPedidoCriado(Pedido pedido) {
@@ -27,15 +28,8 @@ public class PedidoEventProducer {
                 .toList();
 
         var evento = new PedidoCriadoEvent(pedido.getId(), itens, Instant.now());
-
-        // chave = pedidoId garante ordenação por pedido dentro da partição
-        kafkaTemplate.send(KafkaTopics.PEDIDO_CRIADO, pedido.getId().toString(), evento)
-                .whenComplete((result, ex) -> {
-                    if (ex != null) {
-                        log.error("Falha ao publicar PedidoCriadoEvent para pedido {}", pedido.getId(), ex);
-                    } else {
-                        log.info("PedidoCriadoEvent publicado para pedido {}", pedido.getId());
-                    }
-                });
+        UUID eventId = outboxWriter.enqueue(KafkaTopics.PEDIDO_CRIADO, pedido.getId().toString(), evento);
+        log.info("PedidoCriadoEvent registrado no outbox para pedido {} (eventId={})",
+                pedido.getId(), eventId);
     }
 }

@@ -5,13 +5,18 @@ import com.rodrigo.pedidos.comum.events.EstoqueReservadoEvent;
 import com.rodrigo.pedidos.pedido.domain.Pedido;
 import com.rodrigo.pedidos.pedido.domain.PedidoItem;
 import com.rodrigo.pedidos.pedido.domain.StatusPedido;
+import com.rodrigo.pedidos.pedido.kafka.EstoqueEventConsumer;
 import com.rodrigo.pedidos.pedido.repository.PedidoRepository;
 import com.rodrigo.pedidos.pedido.support.IntegrationTestBase;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.header.internals.RecordHeader;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -36,6 +41,12 @@ class EstoqueEventConsumerIntegrationTest extends IntegrationTestBase {
 
     @Autowired
     private MeterRegistry meterRegistry;
+
+    @Autowired
+    private EstoqueEventConsumer estoqueEventConsumer;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private UUID criarPedidoPendente() {
         var item = PedidoItem.novo(UUID.randomUUID(), 3, BigDecimal.valueOf(9.99));
@@ -84,5 +95,59 @@ class EstoqueEventConsumerIntegrationTest extends IntegrationTestBase {
                 });
 
         assertThat(meterRegistry.counter("pedido.cancelado").count()).isEqualTo(canceladosAntes + 1);
+    }
+
+    @Test
+    void eventosDuplicadosEConflitantesNaoDevemRecontarOuSobrescreverEstado() {
+        UUID pedidoId = criarPedidoPendente();
+        double confirmadosAntes = meterRegistry.counter("pedido.confirmado").count();
+        double conflitosAntes = meterRegistry.counter("pedido.transicao.conflito",
+                "estado_atual", "CONFIRMADO", "estado_recebido", "CANCELADO").count();
+        var confirmado = new EstoqueReservadoEvent(pedidoId, Instant.now());
+
+        estoqueEventConsumer.aoReservarEstoque(confirmado);
+        estoqueEventConsumer.aoReservarEstoque(confirmado);
+        estoqueEventConsumer.aoFalharEstoque(new EstoqueIndisponivelEvent(pedidoId,
+                List.of(UUID.randomUUID()), "conflito", Instant.now()));
+
+        assertThat(pedidoRepository.findById(pedidoId).orElseThrow().getStatus())
+                .isEqualTo(StatusPedido.CONFIRMADO);
+        assertThat(meterRegistry.counter("pedido.transicao.conflito", "estado_atual", "CONFIRMADO",
+                "estado_recebido", "CANCELADO").count()).isEqualTo(conflitosAntes + 1);
+        assertThat(meterRegistry.counter("pedido.confirmado").count()).isEqualTo(confirmadosAntes + 1);
+    }
+
+    @Test
+    void handlerDaDltRegistraMetricaEContextoSemPayload() {
+        double antes = meterRegistry.counter("kafka.dlt.records", "service", "pedido-service",
+                "source_topic", "estoque-reservado").count();
+        var record = new ConsumerRecord<String, Object>("estoque-reservado-dlt", 0, 42L, "pedido-123", null);
+        record.headers().add(new RecordHeader(KafkaHeaders.DLT_ORIGINAL_TOPIC,
+                "estoque-reservado".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        record.headers().add(new RecordHeader(KafkaHeaders.DLT_EXCEPTION_MESSAGE,
+                "falha simulada".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        estoqueEventConsumer.aoChegarNaDlt(record);
+
+        assertThat(meterRegistry.counter("kafka.dlt.records", "service", "pedido-service",
+                "source_topic", "estoque-reservado").count()).isEqualTo(antes + 1);
+    }
+
+    @Test
+    void resultadoRecebidoAntesDoPedidoEhTentadoNovamenteAposPedidoFicarVisivel() throws Exception {
+        UUID pedidoId = UUID.randomUUID();
+        double ausentesAntes = meterRegistry.counter("pedido.evento.pedido_nao_visivel").count();
+        kafkaTemplate.send("estoque-reservado", pedidoId.toString(),
+                new EstoqueReservadoEvent(pedidoId, Instant.now())).get(10, java.util.concurrent.TimeUnit.SECONDS);
+
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(meterRegistry.counter("pedido.evento.pedido_nao_visivel").count())
+                        .isGreaterThan(ausentesAntes));
+        jdbcTemplate.update("INSERT INTO pedidos (id, status, criado_em) VALUES (?, 'PENDENTE', CURRENT_TIMESTAMP)",
+                pedidoId);
+
+        Awaitility.await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
+                assertThat(pedidoRepository.findById(pedidoId).orElseThrow().getStatus())
+                        .isEqualTo(StatusPedido.CONFIRMADO));
     }
 }
