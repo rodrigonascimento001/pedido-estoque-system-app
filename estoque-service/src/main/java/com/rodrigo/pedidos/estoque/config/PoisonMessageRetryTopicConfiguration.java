@@ -38,6 +38,11 @@ public class PoisonMessageRetryTopicConfiguration extends RetryTopicConfiguratio
             if (errorHandler instanceof DefaultErrorHandler defaultErrorHandler) {
                 defaultErrorHandler.setRetryListeners(new RetryListener() {
                     @Override
+                    public void failedDelivery(ConsumerRecord<?, ?> record, Exception exception, int deliveryAttempt) {
+                        // nada a fazer: só interessa o momento em que o registro é recuperado (enviado ao DLT)
+                    }
+
+                    @Override
                     public void recovered(ConsumerRecord<?, ?> record, Exception exception) {
                         registrarSeMalformado(record, exception);
                     }
