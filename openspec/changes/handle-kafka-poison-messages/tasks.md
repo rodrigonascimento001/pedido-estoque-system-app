@@ -14,5 +14,5 @@
 
 ## 4. Verificação e documentação
 
-- [ ] 4.1 `mvn -B verify` verde na esteira.
+- [x] 4.1 `mvn -B verify` verde na esteira.
 - [x] 4.2 Atualizar o README (tabela de métricas) e o item 5 do `AGENTS.md`, que passa a cobrir só tópicos e partições.
