@@ -226,7 +226,8 @@ dentro do compose; em dev local e nos testes o comportamento é o de antes (log 
 | `estoque.reserva.idempotency.conflict` | counter | — | estoque-service — mesmo `pedidoId` reentregue com conteúdo diferente |
 | `pedido.transicao.conflito` | counter | `estado_atual`, `estado_recebido` | pedido-service — evento de resultado conflitante com o estado atual do pedido |
 | `pedido.evento.pedido_nao_visivel` | counter | — | pedido-service — resposta do estoque para um pedido que ainda não existe no banco |
-| `kafka.dlt.records` | counter | `service`, `source_topic` | ambos — registros retidos no DLT após esgotar os retries |
+| `kafka.dlt.records` | counter | `service`, `source_topic` | ambos — registros que foram para o DLT (retries esgotados ou mensagem malformada) |
+| `kafka.poison.records` | counter | `service`, `source_topic` | ambos — mensagens malformadas (não desserializam) desviadas direto para o DLT, sem retries |
 
 > Todas as métricas recebem automaticamente as tags `service` e `env`.
 > Não use IDs (pedidoId, produtoId) como tag: a cardinalidade explode e o custo também.

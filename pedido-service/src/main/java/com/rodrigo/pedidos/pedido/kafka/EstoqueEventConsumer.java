@@ -57,8 +57,8 @@ public class EstoqueEventConsumer {
 
     @DltHandler
     public void aoChegarNaDlt(ConsumerRecord<String, Object> record) {
-        String sourceTopic = header(record, KafkaHeaders.DLT_ORIGINAL_TOPIC);
-        String cause = header(record, KafkaHeaders.DLT_EXCEPTION_MESSAGE);
+        String sourceTopic = header(record, KafkaHeaders.DLT_ORIGINAL_TOPIC, KafkaHeaders.ORIGINAL_TOPIC);
+        String cause = header(record, KafkaHeaders.DLT_EXCEPTION_MESSAGE, KafkaHeaders.EXCEPTION_MESSAGE);
         meterRegistry.counter("kafka.dlt.records", "service", "pedido-service",
                 "source_topic", sourceTopic == null ? "unknown" : sourceTopic).increment();
         log.error("Evento retido em DLT: sourceTopic={}, dltTopic={}, key={}, partition={}, offset={}, cause={}",
@@ -109,9 +109,19 @@ public class EstoqueEventConsumer {
                 pedidoId, atual, recebido);
     }
 
-    private String header(ConsumerRecord<?, ?> record, String name) {
-        Header header = record.headers().lastHeader(name);
-        return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
+    /**
+     * Primeiro header encontrado entre os nomes dados. O spring-kafka 3.1 grava os headers do DLT
+     * como {@code kafka_original-topic} / {@code kafka_exception-message}; os nomes {@code kafka_dlt-*}
+     * (DLT_*) só passam a ser gravados em versões mais novas. Aceitar os dois evita tag "unknown".
+     */
+    private String header(ConsumerRecord<?, ?> record, String... nomes) {
+        for (String nome : nomes) {
+            Header header = record.headers().lastHeader(nome);
+            if (header != null) {
+                return new String(header.value(), StandardCharsets.UTF_8);
+            }
+        }
+        return null;
     }
 
     static class PedidoAindaNaoVisivelException extends RuntimeException {
