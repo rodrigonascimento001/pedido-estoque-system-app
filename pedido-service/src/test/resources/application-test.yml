@@ -3,3 +3,13 @@ spring:
     consumer:
       auto-offset-reset: earliest
       group-id: pedido-service-test-${random.uuid}
+
+# Backoff curto do retry topic. Fica aqui (e não em @TestPropertySource numa classe de teste) de
+# propósito: propriedade própria de uma classe cria um segundo ApplicationContext, e o primeiro
+# continua vivo no cache do Spring com os listeners Kafka ativos no mesmo grupo "pedido-service".
+# Os dois contextos dividem as partições, e uma mensagem pode ser consumida pelo contexto errado
+# (muda o banco compartilhado, mas incrementa o contador do outro registry).
+app:
+  kafka:
+    retry:
+      backoff-ms: 500
