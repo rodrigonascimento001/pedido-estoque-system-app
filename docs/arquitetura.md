@@ -188,6 +188,19 @@ sequenceDiagram
 
 _Garantia: pelo menos uma vez. Duplicatas são absorvidas no destino (reserva idempotente por pedido, transição só a partir de PENDENTE)._
 
+## 6. Estados do pedido
+
+```mermaid
+stateDiagram-v2
+  [*] --> PENDENTE: POST /api/pedidos
+  PENDENTE --> CONFIRMADO: estoque-reservado
+  PENDENTE --> CANCELADO: estoque-indisponivel
+  CONFIRMADO --> CONFIRMADO: evento duplicado ignorado, conta pedido.transicao.conflito
+  CANCELADO --> CANCELADO: evento duplicado ignorado, conta pedido.transicao.conflito
+```
+
+_Só PENDENTE aceita transição. Se o evento chega antes de o pedido estar visível, o consumer falha e entra no retry (`pedido.evento.pedido_nao_visivel`)._
+
 ## Onde evoluir
 
 Ver o backlog em `AGENTS.md` (itens 1 a 6). Lacuna sem item próprio: pedido PENDENTE sem timeout nem compensação quando o estoque nunca responde e o registro fica no DLT.
