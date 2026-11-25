@@ -39,8 +39,6 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     labels:
       com.datadoghq.ad.logs: '[{"source": "java", "service": "pedido-service"}]'
-    ports:
-      - "8081:8081"
     networks:
       - pedido-estoque-network
 
@@ -59,8 +57,6 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     labels:
       com.datadoghq.ad.logs: '[{"source": "java", "service": "estoque-service"}]'
-    ports:
-      - "8082:8082"
     networks:
       - pedido-estoque-network
 
@@ -80,6 +76,9 @@ services:
       REDIS_HOST: redis
       PEDIDO_SERVICE_URI: http://pedido-service:8081
       ESTOQUE_SERVICE_URI: http://estoque-service:8082
+      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-http://localhost:8180/realms/pedido-estoque}
+      KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://keycloak:8080/realms/pedido-estoque/protocol/openid-connect/certs}
+      KEYCLOAK_API_AUDIENCE: ${KEYCLOAK_API_AUDIENCE:-pedido-estoque-api}
     labels:
       com.datadoghq.ad.logs: '[{"source": "java", "service": "api-gateway"}]'
     ports:

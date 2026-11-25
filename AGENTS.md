@@ -9,6 +9,16 @@
 - Mudanças seguem o padrão OpenSpec (`openspec/changes/<nome>/` com proposal, design, specs e tasks;
   arquivadas em `openspec/changes/archive/` com a data, e specs consolidadas em `openspec/specs/`).
 - Change ativa: `handle-kafka-poison-messages` (parte de mensagens malformadas do item 5).
+- Segurança de API concluída na change `api-security-keycloak` (arquivada em 2026-11-25):
+  gateway valida JWTs do Keycloak (issuer, audience, assinatura e validade); os serviços
+  pedido/estoque não publicam portas no host; Actuator usa listeners de gerenciamento
+  separados, sem publicação no host.
+- Keycloak local: realm `pedido-estoque`, issuer padrão
+  `http://localhost:8180/realms/pedido-estoque`, audience `pedido-estoque-api`.
+  Login local é feito pelo fluxo de usuário documentado nos READMEs da aplicação e da
+  infraestrutura. Ajustes de issuer, JWKS e audience são configuráveis por ambiente.
+  Não versionar credenciais locais; defaults de desenvolvimento não devem ser usados
+  em produção.
 
 ## Follow-up backlog
 
@@ -16,11 +26,9 @@ Itens planejados, cada um para virar uma change separada. Estado verificado cont
 `develop` em 22/11/2026; todos continuam pendentes. Os itens 1 a 5 vieram da revisão de código e
 ficaram fora da change `harden-order-kafka-consistency`, já arquivada.
 
-1. **API security:** replace the gateway's Bearer-presence check with real JWT
-   validation (hoje o `AuthenticationFilter` só confere o prefixo `Bearer `); keep application
-   services unreachable directly from the host (as portas 8081 e 8082 estão publicadas no
-   `docker-compose.yml`); restrict actuator exposure and isolate the management port. Confirm the
-   JWT issuer/key source when the security change is proposed.
+1. **API security — concluído:** validação JWT real no gateway via Keycloak, serviços de
+   pedido/estoque privados à rede Docker e endpoints Actuator restritos em listeners de
+   gerenciamento isolados. Requisitos consolidados em `openspec/specs/`.
 2. **Server-side pricing:** stop accepting `precoUnitario` as authoritative
    client input (hoje vem em `PedidoRequest`). Resolve prices from a server-controlled product
    catalog. The project currently has no catalog, so decide whether to add one locally or

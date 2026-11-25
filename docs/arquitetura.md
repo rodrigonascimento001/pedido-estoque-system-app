@@ -1,6 +1,6 @@
 # Arquitetura do sistema Pedido-Estoque
 
-Estado da `develop` em 24/11/2026 (com `handle-kafka-poison-messages`). Os diagramas são Mermaid e o GitHub os renderiza nesta página. Atualize-os na mesma change que alterar fluxo, tópicos ou componentes.
+Estado após a change `api-security-keycloak`. Os diagramas são Mermaid e o GitHub os renderiza nesta página. Atualize-os na mesma change que alterar fluxo, tópicos ou componentes.
 
 ## 1. Componentes e dados
 
@@ -8,13 +8,19 @@ Cada serviço tem seu próprio Postgres. A única ligação entre pedido e estoq
 
 ```mermaid
 flowchart LR
-  C([Cliente]) -->|"HTTP :8080"| GW
-  subgraph GWB["api-gateway :8080"]
-    GW["AuthenticationFilter<br/>só confere prefixo Bearer"] --> RL["RequestRateLimiter<br/>20 req/s, burst 40, por IP"]
+  C([Cliente / navegador]) -->|"login Authorization Code + PKCE :8180"| KC
+  KC -->|"access token assinado"| C
+  C -->|"Bearer access token :8080"| GW
+  subgraph GWB["api-gateway :8080 / management :9080"]
+    GW["Spring Security Resource Server<br/>valida JWT Keycloak: assinatura, iss, aud, exp"] --> RL["RequestRateLimiter<br/>20 req/s, burst 40, por IP"]
   end
   RL <-->|"contadores"| R[("Redis")]
   RL -->|"/api/pedidos/**"| PS
   RL -->|"/api/estoque/**"| ES
+  subgraph INFRA["Compose de infraestrutura / rede compartilhada"]
+    KC["Keycloak :8080 interno / :8180 host<br/>realm pedido-estoque"]
+  end
+  KC -.->|"JWKS / chaves de assinatura"| GW
   subgraph PSB["pedido-service :8081"]
     PS["PedidoController<br/>PedidoService"]
     PO["OutboxRelay<br/>a cada 1s, lote 25"]
@@ -44,7 +50,7 @@ flowchart LR
   DD -.- ESB
 ```
 
-_Linhas cheias são o caminho normal. Linhas tracejadas são o desvio para tópicos de retry e DLT. Postgres, Kafka e Redis ficam fora do `docker-compose.yml` da aplicação (a stack de infraestrutura é separada). As portas 8081 e 8082 também estão publicadas no host, o que contorna o gateway (backlog 1)._
+_O navegador autentica o usuário no Keycloak (Authorization Code + PKCE) e recebe um access token. O cliente envia o token ao gateway; o gateway valida assinatura usando o JWKS do Keycloak, `iss`, `aud` e validade temporal antes de aplicar rate limit e rotear a chamada. Não há exigência de roles/scopes nesta etapa. Linhas cheias são o caminho normal; linhas tracejadas indicam consulta de chaves ou desvio para retry/DLT. Postgres, Kafka, Redis e Keycloak ficam no Compose de infraestrutura, separado do Compose da aplicação. Apenas gateway (`8080`) e Keycloak (`8180`) são publicados no host; serviços e management permanecem internos._
 
 ## 2. Criar pedido com estoque disponível
 
@@ -54,6 +60,7 @@ O cliente recebe 201 assim que o pedido é gravado como PENDENTE. A confirmaçã
 sequenceDiagram
   autonumber
   actor C as Cliente
+  participant KC as Keycloak
   participant GW as api-gateway
   participant PS as pedido-service
   participant PDB as Postgres pedido
@@ -61,8 +68,13 @@ sequenceDiagram
   participant ES as estoque-service
   participant EDB as Postgres estoque
 
-  C->>GW: POST /api/pedidos
-  GW->>GW: valida prefixo Bearer e limite por IP no Redis
+  C->>KC: login do usuário (Authorization Code + PKCE)
+  KC-->>C: access token (issuer e audience configurados)
+  C->>GW: POST /api/pedidos + Bearer token
+  GW->>GW: valida assinatura, issuer, audience e validade do JWT
+  GW->>KC: busca JWKS (quando necessário, pela rede Docker)
+  KC-->>GW: chaves públicas do realm
+  GW->>GW: aplica limite por IP no Redis
   GW->>PS: encaminha
   rect rgba(120,150,200,0.15)
   Note over PS,PDB: uma transação

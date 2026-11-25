@@ -1,6 +1,6 @@
 # Subir o projeto localmente
 
-O ambiente local usa dois projetos Docker Compose coordenados. Suba primeiro a infraestrutura, que cria a rede compartilhada `pedido-estoque-network` e fornece Kafka, bancos de dados, Redis e o Datadog Agent. Depois suba os serviços da aplicação.
+O ambiente local usa dois projetos Docker Compose coordenados. Suba primeiro a infraestrutura, que cria a rede compartilhada `pedido-estoque-network` e fornece Kafka, bancos de dados, Redis, Keycloak e o Datadog Agent. Depois suba os serviços da aplicação.
 
 ## 1. Configure os arquivos `.env` (na primeira execução)
 
@@ -12,7 +12,7 @@ Copy-Item .env.example .env  # somente se .env ainda não existir
 notepad .env
 ```
 
-Defina `DD_API_KEY` e confirme o `DD_SITE` da sua conta. Mantenha a chave somente nesse `.env` local; não a envie ao Git.
+Defina `DD_API_KEY`, confirme o `DD_SITE` da sua conta e troque `KEYCLOAK_ADMIN_PASSWORD`. Mantenha esses valores somente nesse `.env` local; não os envie ao Git.
 
 Na aplicação, o `.env` é opcional para subir os serviços com as configurações padrão. Para habilitar o envio de telemetria ao Agent, crie ou edite o `.env` da aplicação e use:
 
@@ -44,7 +44,7 @@ docker compose --profile observability up -d
 docker compose ps
 ```
 
-O perfil `observability` inclui o Datadog Agent. Acompanhe os logs, se necessário:
+O perfil `observability` inclui o Datadog Agent; Keycloak faz parte do stack padrão. Aguarde Kafka, Redis, Postgres e Keycloak ficarem saudáveis. Acompanhe os logs, se necessário:
 
 ```powershell
 docker compose logs -f
@@ -84,6 +84,8 @@ docker compose logs -f estoque-service
 ```
 
 Saia do acompanhamento dos logs com `Ctrl+C`; isso não para os containers.
+
+Somente o gateway é publicado no host (`http://localhost:8080`); Keycloak usa `http://localhost:8180`. Os serviços de pedido/estoque e as portas de management não são publicados. Configure o login Authorization Code + PKCE e obtenha um token conforme [insomnia/README.md](insomnia/README.md) antes das chamadas da API.
 
 ## 4. Parar os serviços
 
