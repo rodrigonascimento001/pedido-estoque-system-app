@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: api-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/pedido-estoque}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://keycloak:8080/realms/pedido-estoque/protocol/openid-connect/certs}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -32,11 +38,21 @@ spring:
                 redis-rate-limiter.burstCapacity: 40
                 key-resolver: "#{@ipKeyResolver}"
 
+app:
+  security:
+    jwt:
+      audience: ${KEYCLOAK_API_AUDIENCE:pedido-estoque-api}
+
 management:
+  server:
+    port: 9080
   endpoints:
     web:
       exposure:
-        include: health,gateway,metrics
+        include: health
+  endpoint:
+    health:
+      show-details: never
   statsd:
     metrics:
       export:

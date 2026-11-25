@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-11-24
+goal: Protect HTTP APIs with Keycloak-issued access tokens and reduce direct
+  host exposure

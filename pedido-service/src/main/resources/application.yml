@@ -60,10 +60,15 @@ app:
       backoff-ms: ${KAFKA_RETRY_BACKOFF_MS:2000}
 
 management:
+  server:
+    port: 9081
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health
+  endpoint:
+    health:
+      show-details: never
   statsd:
     metrics:
       export:
