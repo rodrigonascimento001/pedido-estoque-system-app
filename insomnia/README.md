@@ -6,9 +6,10 @@ Use o environment `Base Environment` (gateway em `http://localhost:8080`). O gat
 
 ## Login local
 
-1. Suba primeiro a infraestrutura; ela inicia o Keycloak em `http://localhost:8180` e importa o realm `pedido-estoque`. Consulte o README do repositório de infraestrutura para configurar a senha administrativa e criar um usuário local.
-2. Em uma requisição da collection, abra **Auth**, selecione **OAuth 2.0** e configure Authorization Code, client ID `pedido-estoque-local`, scope `openid`, PKCE `S256`, authorize URL `http://localhost:8180/realms/pedido-estoque/protocol/openid-connect/auth`, token URL `http://localhost:8180/realms/pedido-estoque/protocol/openid-connect/token` e redirect URI `https://app.insomnia.rest/oauth/redirect`. Deixe o client secret vazio.
-3. Conclua o login no navegador, copie o access token emitido e cole na variável `token` do environment Base Environment. As requisições da collection enviam `Authorization: Bearer {{ _.token }}`.
+1. Suba primeiro a infraestrutura; ela inicia o Keycloak em `http://localhost:8180` e importa o realm `pedido-estoque`. O Admin Console fica em `http://localhost:8180/admin/`. O usuário administrativo padrão é `admin`; a senha inicial padrão é `local-only-change-me`, a menos que `KEYCLOAK_ADMIN_USERNAME` e `KEYCLOAK_ADMIN_PASSWORD` tenham sido alteradas no `.env` da infraestrutura. No realm `pedido-estoque`, autentique-se com um usuário do realm, não com o administrador do console.
+2. Abra a requisição **00 - Login Keycloak > Obter access token (Authorization Code + PKCE)** e clique em **Fetch Tokens** na aba **Auth**. Ela já está configurada com o client público `pedido-estoque-local`, scope `openid`, PKCE `S256`, os endpoints do realm e redirect URI `https://app.insomnia.rest/oauth/redirect`.
+3. Faça login na janela do navegador com seu usuário do realm e autorize o retorno ao Insomnia. O access token aparecerá no campo **Access Token** da aba **Auth**. Copie-o para `token` no environment **Base Environment**.
+4. As chamadas de negócio enviam `Authorization: Bearer {{ _.token }}`. O token deve ter sido emitido pelo realm `pedido-estoque` e conter a audience `pedido-estoque-api`.
 
 Execute `00 - Saúde e preparação` para cadastrar os dois produtos. O endpoint `POST /api/estoque` soma a quantidade ao saldo atual, então repetir a chamada adiciona mais unidades.
 
