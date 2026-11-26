@@ -85,7 +85,7 @@ docker compose logs -f estoque-service
 
 Saia do acompanhamento dos logs com `Ctrl+C`; isso não para os containers.
 
-Somente o gateway é publicado no host (`http://localhost:8080`); Keycloak usa `http://localhost:8180`. Os serviços de pedido/estoque e as portas de management não são publicados. Configure o login Authorization Code + PKCE e obtenha um token conforme [insomnia/README.md](insomnia/README.md) antes das chamadas da API.
+Somente o gateway é publicado no host (`http://localhost:8080`); Keycloak usa `http://localhost:8180`. Os serviços de pedido/estoque e as portas de management não são publicados. Configure o login Authorization Code + PKCE e obtenha um token conforme [insomnia/README.md](../insomnia/README.md) antes das chamadas da API.
 
 ## 4. Parar os serviços
 
