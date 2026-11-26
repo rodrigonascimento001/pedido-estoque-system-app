@@ -15,6 +15,9 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
     gateway:
       routes:
         - id: pedido-service
