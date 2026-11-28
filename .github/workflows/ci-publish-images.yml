@@ -50,6 +50,7 @@ jobs:
           - pedido-service
           - estoque-service
           - api-gateway
+          - user-registration-service
     steps:
       - name: Check out source
         uses: actions/checkout@v7

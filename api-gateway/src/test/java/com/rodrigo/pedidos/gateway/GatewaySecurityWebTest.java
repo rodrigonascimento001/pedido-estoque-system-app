@@ -46,6 +46,20 @@ class GatewaySecurityWebTest {
     }
 
     @Test
+    void allowsAnonymousUserRegistrationOnlyForPost() {
+        webTestClient.post()
+                .uri("/api/usuarios")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("created");
+
+        webTestClient.get()
+                .uri("/api/usuarios")
+                .exchange()
+                .expectStatus().isUnauthorized();
+    }
+
+    @Test
     void forwardsRequestWithDecodedJwt() {
         when(jwtDecoder.decode(VALID_TOKEN)).thenReturn(Mono.just(validJwt()));
 

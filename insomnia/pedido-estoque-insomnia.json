@@ -305,6 +305,47 @@
                           "settingFollowRedirects":  "global"
                       },
                       {
+                          "_id":  "fld_827144ed347c417c8a28bec339ead10f",
+                          "parentId":  "__WORKSPACE_ID__",
+                          "name":  "00 - Cadastro",
+                          "description":  "Crie uma conta no realm pedido-estoque antes de obter o access token.",
+                          "_type":  "request_group",
+                          "metaSortKey":  0
+                      },
+                      {
+                          "_id":  "req_fc299f3a289a446d87936af81903de74",
+                          "parentId":  "fld_827144ed347c417c8a28bec339ead10f",
+                          "name":  "Cadastrar usuário no Keycloak",
+                          "description":  "Edite username, email e password no body. Não use senha real em workspace compartilhado.",
+                          "url":  "{{ _.base_url }}/api/usuarios",
+                          "method":  "POST",
+                          "body":  {
+                                       "mimeType":  "application/json",
+                                       "text":  "{\n  \"username\": \"novo.usuario\",\n  \"email\": \"novo.usuario@example.com\",\n  \"password\": \"\"\n}"
+                                   },
+                          "parameters":  [
+
+                                         ],
+                          "headers":  [
+                                          {
+                                              "name":  "Content-Type",
+                                              "value":  "application/json"
+                                          }
+                                      ],
+                          "authentication":  {
+
+                                             },
+                          "metaSortKey":  0,
+                          "isPrivate":  false,
+                          "settingStoreCookies":  true,
+                          "settingSendCookies":  true,
+                          "settingDisableRenderRequestBody":  false,
+                          "settingEncodeUrl":  true,
+                          "settingRebuildPath":  true,
+                          "settingFollowRedirects":  "global",
+                          "_type":  "request"
+                      },
+                      {
                           "_id":  "fld_fddc912bae6042ec8792f7f8f0e643d4",
                           "parentId":  "__WORKSPACE_ID__",
                           "name":  "00 - Login Keycloak",

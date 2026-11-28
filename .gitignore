@@ -4,6 +4,7 @@ target/
 *.iml
 .vscode/
 .DS_Store
+/.env
 ../../repos/pedido-estoque-system-infra/.env
 /.codex/skills/openspec-apply-change/SKILL.md
 /.codex/skills/openspec-archive-change/SKILL.md
