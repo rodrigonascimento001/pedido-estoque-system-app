@@ -1,6 +1,9 @@
 package com.rodrigo.pedidos.pedido.controller;
 
+import com.rodrigo.pedidos.comum.security.AuthenticatedUserHeader;
+import com.rodrigo.pedidos.pedido.domain.Pedido;
 import com.rodrigo.pedidos.pedido.dto.PedidoRequest;
+import com.rodrigo.pedidos.pedido.idempotency.IdempotencyKeys;
 import com.rodrigo.pedidos.pedido.dto.PedidoResponse;
 import com.rodrigo.pedidos.pedido.service.PedidoService;
 import jakarta.validation.Valid;
@@ -22,10 +25,23 @@ public class PedidoController {
     }
 
     @PostMapping
-    public ResponseEntity<PedidoResponse> criar(@Valid @RequestBody PedidoRequest request) {
-        var pedido = pedidoService.criar(request);
-        var response = PedidoResponse.de(pedido);
-        return ResponseEntity.created(URI.create("/api/pedidos/" + pedido.getId())).body(response);
+    public ResponseEntity<PedidoResponse> criar(
+            @Valid @RequestBody PedidoRequest request,
+            @RequestHeader(name = IdempotencyKeys.HEADER, required = false) String idempotencyKey,
+            @RequestHeader(name = AuthenticatedUserHeader.NAME, required = false) String usuario) {
+        if (idempotencyKey == null) {
+            return criado(pedidoService.criar(request), false);
+        }
+        var criacao = pedidoService.criar(request, idempotencyKey, usuario);
+        return criado(criacao.pedido(), criacao.repeticao());
+    }
+
+    private ResponseEntity<PedidoResponse> criado(Pedido pedido, boolean repeticao) {
+        var resposta = ResponseEntity.created(URI.create("/api/pedidos/" + pedido.getId()));
+        if (repeticao) {
+            resposta.header(IdempotencyKeys.REPLAY_HEADER, "true");
+        }
+        return resposta.body(PedidoResponse.de(pedido));
     }
 
     @GetMapping("/{id}")

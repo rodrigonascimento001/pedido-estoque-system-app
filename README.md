@@ -177,9 +177,13 @@ curl -X POST http://localhost:8080/api/estoque \
   -d '{"produtoId":"11111111-1111-1111-1111-111111111111","quantidade":10}'
 
 # 2. criar pedido via gateway
+# O header Idempotency-Key é opcional: repetir a mesma requisição com a mesma chave
+# devolve o pedido original (header Idempotent-Replayed: true) em vez de criar outro.
+# A chave vale por 24 h, é isolada por usuário e aceita 1 a 128 caracteres ASCII sem espaços.
 curl -X POST http://localhost:8080/api/pedidos \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
   -d '{"itens":[{"produtoId":"11111111-1111-1111-1111-111111111111","quantidade":2,"precoUnitario":19.90}]}'
 
 # 3. consultar status do pedido (assíncrono — pode levar alguns ms até virar CONFIRMADO)
@@ -235,6 +239,8 @@ dentro do compose; em dev local e nos testes o comportamento é o de antes (log 
 | `pedido.confirmado` / `pedido.cancelado` | counter | — | pedido-service |
 | `pedido.saga.duracao` | timer | `resultado` (confirmado/cancelado) | pedido-service — tempo entre criar o pedido e receber a resposta do estoque |
 | `estoque.reserva` | counter | `resultado` (sucesso/saldo_insuficiente/produto_inexistente) | estoque-service |
+| `pedido.idempotency.replay` | counter | — | pedido-service — `POST /api/pedidos` repetido com a mesma `Idempotency-Key` devolveu o pedido original |
+| `pedido.idempotency.conflict` | counter | — | pedido-service — `Idempotency-Key` reutilizada com corpo diferente (422) |
 | `estoque.reserva.idempotency.conflict` | counter | — | estoque-service — mesmo `pedidoId` reentregue com conteúdo diferente |
 | `pedido.transicao.conflito` | counter | `estado_atual`, `estado_recebido` | pedido-service — evento de resultado conflitante com o estado atual do pedido |
 | `pedido.evento.pedido_nao_visivel` | counter | — | pedido-service — resposta do estoque para um pedido que ainda não existe no banco |

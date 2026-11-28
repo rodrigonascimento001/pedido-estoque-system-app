@@ -120,11 +120,16 @@ sequenceDiagram
   GW->>KC: busca JWKS (quando necessário, pela rede Docker)
   KC-->>GW: chaves públicas do realm
   GW->>GW: aplica limite por IP no Redis
-  GW->>PS: encaminha
+  GW->>PS: encaminha com X-Authenticated-User = sub do JWT
   rect rgba(120,150,200,0.15)
   Note over PS,PDB: uma transação
+  opt header Idempotency-Key presente
+    PS->>PDB: INSERT idempotency_key (usuário, chave, hash) ON CONFLICT DO NOTHING
+    Note over PS,PDB: se a chave já existe com o mesmo hash, devolve o pedido original<br/>(201 + Idempotent-Replayed) e encerra; com hash diferente, 422
+  end
   PS->>PDB: INSERT pedido PENDENTE + itens
   PS->>PDB: INSERT outbox_event PedidoCriadoEvent
+  PS->>PDB: vincula o pedido à chave
   end
   PS-->>C: 201 PENDENTE
 
