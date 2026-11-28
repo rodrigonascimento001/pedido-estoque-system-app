@@ -15,6 +15,8 @@
   gateway valida JWTs do Keycloak (issuer, audience, assinatura e validade); os serviços
   pedido/estoque não publicam portas no host; Actuator usa listeners de gerenciamento
   separados, sem publicação no host.
+- Idioma: código novo (classes, colunas, métricas, headers, roles) usa inglês; nomes existentes em
+  português ficam como estão até uma change dedicada.
 - Identidade nos serviços: o gateway repassa o `sub` do JWT validado no header interno
   `X-Authenticated-User` (constante em `common`) e descarta o valor enviado pelo cliente. O
   `pedido-service` confia nesse header, o que só é seguro enquanto as portas 8081/8082 não forem
@@ -36,8 +38,8 @@
 
 Itens planejados, cada um para virar uma change OpenSpec separada. Estado verificado contra o
 código da `develop` em 28/11/2026. Concluídos e arquivados: consistência Kafka (outbox, reserva
-idempotente, transições guardadas), mensagens malformadas, segurança de API com Keycloak e
-cadastro público de usuários.
+idempotente, transições guardadas), mensagens malformadas, segurança de API com Keycloak,
+cadastro público de usuários e idempotência do `POST /api/pedidos` (`Idempotency-Key`).
 
 ### A. Próximas changes (ordem sugerida)
 
@@ -48,20 +50,18 @@ cadastro público de usuários.
    no servidor a partir do catálogo do serviço de produtos (item C1) e remover o campo da
    requisição. Se o item C1 ainda não existir, o primeiro passo é decidir entre catálogo local no
    estoque-service ou o serviço novo.
-3. **Idempotência do `POST /api/pedidos` — em andamento (change `idempotent-order-creation`):** suporte a `Idempotency-Key` (chave por usuário, resposta
-   repetida no retry). A idempotência atual cobre só eventos Kafka duplicados por `pedidoId`.
-4. **Pedido preso em PENDENTE e saga travada (novo):** se o estoque nunca responde, ou o registro
+3. **Pedido preso em PENDENTE e saga travada (novo):** se o estoque nunca responde, ou o registro
    fica no DLT, o pedido fica PENDENTE para sempre. Definir prazo, cancelamento/compensação e um
-   monitor de "saga travada". Junta parte do item 5.
-5. **Datadog desatualizado:** o widget "compensações e conflitos de lock" e o monitor
+   monitor de "saga travada". Junta parte do item 4.
+4. **Datadog desatualizado:** o widget "compensações e conflitos de lock" e o monitor
    `monitors/conflito-lock-estoque.json` consultam `estoque.compensacao` e `estoque.lock.conflito`,
    métricas removidas. Remover ou trocar, e cobrir as métricas novas
    (`estoque.reserva.idempotency.conflict`, `pedido.transicao.conflito`,
-   `pedido.evento.pedido_nao_visivel`, `kafka.poison.records`). Combina com o item 4.
-6. **Replay do DLT:** ferramenta (CLI ou endpoint administrativo) para inspecionar e reprocessar
+   `pedido.evento.pedido_nao_visivel`, `kafka.poison.records`). Combina com o item 3.
+5. **Replay do DLT:** ferramenta (CLI ou endpoint administrativo) para inspecionar e reprocessar
    registros dos tópicos `-dlt`. Alerta e métrica já existem (`@DltHandler`, `kafka.dlt.records`,
    monitor `dlt-kafka`).
-7. **Topologia do Kafka:** criar tópicos, partições e réplicas de forma explícita, inclusive
+6. **Topologia do Kafka:** criar tópicos, partições e réplicas de forma explícita, inclusive
    `-retry-N` e `-dlt`. Só ganha peso com mais de uma réplica dos serviços.
 
 ### B. Keycloak: pontos a refinar
@@ -92,7 +92,7 @@ Surgiram durante a change de segurança e ainda precisam de definição antes de
    (recomendado, para não mudar pedidos antigos), e se a criação de perfil acontece no cadastro,
    por evento, ou no primeiro uso.
 3. **Notificações por e-mail (decorrência do C2):** consumir eventos do pedido (criado,
-   confirmado, cancelado) e enviar e-mail. Fica depois de C2 e do item A4. Cuidados: idempotência
+   confirmado, cancelado) e enviar e-mail. Fica depois de C2 e do item A3. Cuidados: idempotência
    por evento e tratamento de falha no provedor, com retry e DLT como nos demais consumers.
 
 Cada serviço novo segue o padrão atual: módulo Maven, banco Postgres próprio, rota no gateway com
@@ -101,7 +101,7 @@ JWT e rate limit, métricas no Datadog, imagem no GHCR e entrada em `docs/arquit
 ### D. Evolução de plataforma
 
 - Cache Redis para leitura de pedido, produto e estoque.
-- Múltiplas réplicas dos serviços (exige o item A7 e testes de concorrência entre réplicas).
+- Múltiplas réplicas dos serviços (exige o item A6 e testes de concorrência entre réplicas).
 - Réplica de leitura do Postgres.
 - `open-promote-pr.yml` comparar o conteúdo das árvores em vez de contar commits, para evitar o
   ciclo de back-merge da `main` para a `develop`.
