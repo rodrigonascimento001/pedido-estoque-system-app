@@ -15,6 +15,10 @@
   gateway valida JWTs do Keycloak (issuer, audience, assinatura e validade); os serviços
   pedido/estoque não publicam portas no host; Actuator usa listeners de gerenciamento
   separados, sem publicação no host.
+- Identidade nos serviços: o gateway repassa o `sub` do JWT validado no header interno
+  `X-Authenticated-User` (constante em `common`) e descarta o valor enviado pelo cliente. O
+  `pedido-service` confia nesse header, o que só é seguro enquanto as portas 8081/8082 não forem
+  publicadas no host.
 - Keycloak local: realm `pedido-estoque`, issuer padrão
   `http://localhost:8180/realms/pedido-estoque`, audience `pedido-estoque-api`.
   Login local é feito pelo fluxo de usuário documentado nos READMEs da aplicação e da
@@ -44,7 +48,7 @@ cadastro público de usuários.
    no servidor a partir do catálogo do serviço de produtos (item C1) e remover o campo da
    requisição. Se o item C1 ainda não existir, o primeiro passo é decidir entre catálogo local no
    estoque-service ou o serviço novo.
-3. **Idempotência do `POST /api/pedidos`:** suporte a `Idempotency-Key` (chave por usuário, resposta
+3. **Idempotência do `POST /api/pedidos` — em andamento (change `idempotent-order-creation`):** suporte a `Idempotency-Key` (chave por usuário, resposta
    repetida no retry). A idempotência atual cobre só eventos Kafka duplicados por `pedidoId`.
 4. **Pedido preso em PENDENTE e saga travada (novo):** se o estoque nunca responde, ou o registro
    fica no DLT, o pedido fica PENDENTE para sempre. Definir prazo, cancelamento/compensação e um
