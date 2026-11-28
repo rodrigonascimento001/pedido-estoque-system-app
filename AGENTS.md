@@ -8,7 +8,10 @@
   nunca *squash*, para as duas branches não divergirem.
 - Mudanças seguem o padrão OpenSpec (`openspec/changes/<nome>/` com proposal, design, specs e tasks;
   arquivadas em `openspec/changes/archive/` com a data, e specs consolidadas em `openspec/specs/`).
-- Change ativa: `handle-kafka-poison-messages` (parte de mensagens malformadas do item 5).
+- Changes ativas: `handle-kafka-poison-messages` (parte de mensagens malformadas do item 5).
+- Cadastro de usuários concluído na change `keycloak-user-registration` (arquivada em
+  2026-11-27): gateway expõe `POST /api/usuarios` sem JWT, com rate limit por IP, e o
+  `user-registration-service` cria contas no realm via Admin API com client credentials.
 - Segurança de API concluída na change `api-security-keycloak` (arquivada em 2026-11-25):
   gateway valida JWTs do Keycloak (issuer, audience, assinatura e validade); os serviços
   pedido/estoque não publicam portas no host; Actuator usa listeners de gerenciamento
@@ -16,9 +19,15 @@
 - Keycloak local: realm `pedido-estoque`, issuer padrão
   `http://localhost:8180/realms/pedido-estoque`, audience `pedido-estoque-api`.
   Login local é feito pelo fluxo de usuário documentado nos READMEs da aplicação e da
-  infraestrutura. Ajustes de issuer, JWKS e audience são configuráveis por ambiente.
-  Não versionar credenciais locais; defaults de desenvolvimento não devem ser usados
-  em produção.
+  infraestrutura. Cadastro público em `POST /api/usuarios` cria a conta no realm via
+  `user-registration-service` com client credentials de menor privilégio (role
+  `realm-management.manage-users` e scope `kc-admin-api`). Ajustes de
+  issuer, JWKS e audience são configuráveis por ambiente. Não versionar credenciais
+  locais; defaults de desenvolvimento não devem ser usados em produção.
+- Ao alterar execução local, cadastro/login ou componentes, atualize na mesma change
+  `docs/EXECUCAO-LOCAL.md` (passo a passo e comandos de validação), `insomnia/README.md`
+  e `docs/arquitetura.md` (diagramas Mermaid); o README raiz acompanha mudanças de
+  módulos ou de fluxo. Não deixar documentação de fluxo para depois de arquivar a change.
 
 ## Follow-up backlog
 
@@ -52,5 +61,5 @@ ficaram fora da change `harden-order-kafka-consistency`, já arquivada.
 
 ## Other open ideas (from the README checklist)
 
-Autenticação real no gateway (item 1 acima), cache Redis para leitura, múltiplas réplicas dos
-serviços, réplica de leitura do Postgres e monitor de "saga travada".
+Cache Redis para leitura, múltiplas réplicas dos serviços, réplica de leitura do Postgres e
+monitor de "saga travada".

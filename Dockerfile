@@ -1,6 +1,6 @@
-# Dockerfile único para os 3 serviços. Uso:
+# Dockerfile único para os serviços. Uso:
 #   docker build --build-arg MODULE=pedido-service -t pedido-service .
-# MODULE: pedido-service | estoque-service | api-gateway
+# MODULE: pedido-service | estoque-service | api-gateway | user-registration-service
 
 # ---------- build ----------
 FROM maven:3.9-eclipse-temurin-21 AS build

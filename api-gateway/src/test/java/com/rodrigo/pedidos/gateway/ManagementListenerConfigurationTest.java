@@ -30,7 +30,8 @@ class ManagementListenerConfigurationTest {
         assertThat(pedidoService).doesNotContain("    ports:");
         assertThat(estoqueService).doesNotContain("    ports:");
         assertThat(gateway).contains("- \"8080:8080\"")
-                .doesNotContain("9080", "9081", "9082");
+                .contains("- \"127.0.0.1:9080:9080\"")
+                .doesNotContain("9081", "9082");
     }
 
     private void assertManagementConfiguration(String yamlPath, String expectedPort) {

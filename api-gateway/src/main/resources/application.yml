@@ -20,6 +20,16 @@ spring:
         static: ${AWS_REGION:us-east-1}
     gateway:
       routes:
+        - id: user-registration-service
+          uri: ${USER_REGISTRATION_SERVICE_URI:http://localhost:8083}
+          predicates:
+            - Path=/api/usuarios
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@ipKeyResolver}"
         - id: pedido-service
           uri: ${PEDIDO_SERVICE_URI:http://localhost:8081}
           predicates:

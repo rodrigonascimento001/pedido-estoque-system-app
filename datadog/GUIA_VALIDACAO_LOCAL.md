@@ -76,7 +76,7 @@ Todas as chamadas de negócio passam pelo gateway com `Authorization: Bearer dev
 Também é possível gerar uma chamada simples pelo terminal:
 
 ```bash
-curl -i http://localhost:8080/actuator/health
+curl -i http://localhost:9080/actuator/health
 ```
 
 ## 5. Validar métricas

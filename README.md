@@ -7,6 +7,7 @@ Implementação inicial da arquitetura esboçada: Client → CDN/LB → API Gate
 
 - **common** — eventos compartilhados (`PedidoCriadoEvent`, `EstoqueReservadoEvent`, `EstoqueIndisponivelEvent`)
 - **api-gateway** — Spring Cloud Gateway: validação de JWT do Keycloak, roteamento e rate limit (Redis)
+- **user-registration-service** — cria usuários habilitados no realm `pedido-estoque` pelo Admin API do Keycloak, usando client credentials de menor privilégio
 - **pedido-service** — cria pedidos (status `PENDENTE`), grava `PedidoCriadoEvent` no outbox transacional, escuta a resposta do estoque
 - **estoque-service** — reserva o estoque de cada pedido de forma atômica e idempotente (uma transação por pedido) e publica `EstoqueReservadoEvent`/`EstoqueIndisponivelEvent` pelo outbox
 
@@ -51,7 +52,7 @@ docker compose up -d --build
 
 O Compose de infraestrutura cria a rede compartilhada `pedido-estoque-network`. O Compose de aplicação usa essa rede e resolve os serviços de infraestrutura pelos nomes `kafka`, `redis`, `postgres-pedidos` e `postgres-estoque`.
 
-O gateway fica disponível em `http://localhost:8080` e o Keycloak em `http://localhost:8180`. Os serviços de pedido e estoque não publicam portas no host; o gateway os acessa pela rede Docker compartilhada. Obtenha um token de usuário no realm `pedido-estoque` antes de chamar a API. O fluxo de login está documentado no README do repositório `pedido-estoque-system-infra` e em [insomnia/README.md](insomnia/README.md).
+O gateway fica disponível em `http://localhost:8080` e o Keycloak em `http://localhost:8180`. O cadastro público é feito por `POST /api/usuarios` e cria a conta no realm `pedido-estoque`; depois, use o login Authorization Code + PKCE para obter um token antes de chamar as rotas protegidas. O fluxo está documentado em [insomnia/README.md](insomnia/README.md).
 
 ### Autenticação da API
 
@@ -59,7 +60,7 @@ O cliente autentica o usuário no Keycloak pelo fluxo de login interativo Author
 
 Defaults locais: realm `pedido-estoque`, issuer `http://localhost:8180/realms/pedido-estoque`, Keycloak no host em `http://localhost:8180` e JWKS acessado pelos containers em `http://keycloak:8080/realms/pedido-estoque/protocol/openid-connect/certs`. Configure `KEYCLOAK_ISSUER_URI`, `KEYCLOAK_JWK_SET_URI` e `KEYCLOAK_API_AUDIENCE` no `.env` quando necessário. O issuer deve corresponder exatamente ao claim `iss` do token. Credenciais de desenvolvimento não devem ser reutilizadas em produção.
 
-Somente o gateway publica uma porta de aplicação no host (`8080`). `pedido-service` e `estoque-service` ficam acessíveis pela rede Docker compartilhada. Cada serviço possui listener de gerenciamento separado, sem portas publicadas no host; apenas o endpoint de health aprovado fica habilitado.
+Somente o gateway publica a API no host (`8080`). `user-registration-service`, `pedido-service` e `estoque-service` ficam acessíveis apenas pela rede Docker compartilhada. O health do gateway é publicado somente no loopback em `9080`; os demais listeners de gerenciamento não são publicados. Apenas health fica habilitado nos listeners de gerenciamento.
 
 Para parar sem remover os dados persistidos, execute `docker compose down` primeiro no repositório da aplicação e depois no repositório de infraestrutura. Não use `-v` se quiser preservar os volumes dos bancos.
 
@@ -67,7 +68,7 @@ O Datadog Agent e opcional e pertence ao Compose de infraestrutura. Configure `D
 
 ## CI e publicação de imagens
 
-O GitHub Actions executa `mvn -B verify` em pull requests e alterações integradas às branches `develop` e `main`. Após uma alteração integrada em `main` passar pela verificação, as imagens privadas de `pedido-service`, `estoque-service` e `api-gateway` são publicadas no GHCR com uma tag baseada no SHA do commit e a tag móvel `main`. Alterações em `develop` não publicam imagens. A publicação não realiza deploy.
+O GitHub Actions executa `mvn -B verify` em pull requests e alterações integradas às branches `develop` e `main`. Após uma alteração integrada em `main` passar pela verificação, as imagens privadas de `pedido-service`, `estoque-service`, `api-gateway` e `user-registration-service` são publicadas no GHCR com uma tag baseada no SHA do commit e a tag móvel `main`. Alterações em `develop` não publicam imagens. A publicação não realiza deploy.
 
 ## Configuração via AWS (perfil `aws`)
 
