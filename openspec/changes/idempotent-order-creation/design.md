@@ -62,8 +62,8 @@ Contadores `pedido.idempotency.replay` e `pedido.idempotency.conflict` (corpo di
 2. Publicar gateway e `pedido-service` juntos. Se o `pedido-service` subir antes do gateway novo, requisições com chave recebem `400` até o gateway atualizar, e requisições sem chave seguem normais.
 3. Rollback: reverter o código; a tabela pode ficar sem uso.
 
-## Open Questions
+## Decisions on the open questions (approved 2026-11-28)
 
-- Janela de retenção de 24 h está adequada para os clientes previstos?
-- Devolver `201` na repetição (proposto) ou `200`? Escolhi `201` por compatibilidade com clientes que tratam só `201` como sucesso.
-- Nome do header interno (`X-Authenticated-User`) deve ser reaproveitado pela change de autorização?
+- Retenção de 24 horas para começar.
+- A repetição devolve `201`.
+- O nome `X-Authenticated-User` é reaproveitado pela change de autorização.
