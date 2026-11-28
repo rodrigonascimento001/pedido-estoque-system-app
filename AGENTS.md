@@ -15,6 +15,8 @@
   gateway valida JWTs do Keycloak (issuer, audience, assinatura e validade); os serviços
   pedido/estoque não publicam portas no host; Actuator usa listeners de gerenciamento
   separados, sem publicação no host.
+- Idioma: código novo (classes, colunas, métricas, headers, roles) usa inglês; nomes existentes em
+  português ficam como estão até uma change dedicada.
 - Identidade nos serviços: o gateway repassa o `sub` do JWT validado no header interno
   `X-Authenticated-User` (constante em `common`) e descarta o valor enviado pelo cliente. O
   `pedido-service` confia nesse header, o que só é seguro enquanto as portas 8081/8082 não forem
