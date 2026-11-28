@@ -120,11 +120,16 @@ sequenceDiagram
   GW->>KC: busca JWKS (quando necessário, pela rede Docker)
   KC-->>GW: chaves públicas do realm
   GW->>GW: aplica limite por IP no Redis
-  GW->>PS: encaminha
+  GW->>PS: encaminha com X-Authenticated-User = sub do JWT
   rect rgba(120,150,200,0.15)
   Note over PS,PDB: uma transação
+  opt header Idempotency-Key presente
+    PS->>PDB: INSERT idempotency_key (usuário, chave, hash) ON CONFLICT DO NOTHING
+    Note over PS,PDB: se a chave já existe com o mesmo hash, devolve o pedido original<br/>(201 + Idempotent-Replayed) e encerra; com hash diferente, 422
+  end
   PS->>PDB: INSERT pedido PENDENTE + itens
   PS->>PDB: INSERT outbox_event PedidoCriadoEvent
+  PS->>PDB: vincula o pedido à chave
   end
   PS-->>C: 201 PENDENTE
 
@@ -213,7 +218,7 @@ flowchart TD
   H --> H2
 ```
 
-_Um registro que não desserializa nunca chega ao `@DltHandler`, por isso a contagem `kafka.poison.records` existe à parte. Não há ferramenta de replay: o DLT é só inspeção e alerta (backlog 4)._
+_Um registro que não desserializa nunca chega ao `@DltHandler`, por isso a contagem `kafka.poison.records` existe à parte. Não há ferramenta de replay: o DLT é só inspeção e alerta (backlog A6)._
 
 ## 6. Como o outbox publica
 
@@ -260,4 +265,4 @@ _Só PENDENTE aceita transição. Se o evento chega antes de o pedido estar vis�
 
 ## Onde evoluir
 
-Ver o backlog em `AGENTS.md` (itens 1 a 6). Lacuna sem item próprio: pedido PENDENTE sem timeout nem compensação quando o estoque nunca responde e o registro fica no DLT.
+Ver o backlog em `AGENTS.md`. Pedido PENDENTE sem timeout nem compensação quando o estoque nunca responde está no item A4.

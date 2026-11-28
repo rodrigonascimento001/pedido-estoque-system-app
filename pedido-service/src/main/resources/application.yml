@@ -54,6 +54,11 @@ app:
     batch-size: ${OUTBOX_BATCH_SIZE:25}
     lease-ms: ${OUTBOX_LEASE_MS:30000}
     send-timeout-ms: ${OUTBOX_SEND_TIMEOUT_MS:10000}
+  idempotency:
+    # Retenção da Idempotency-Key de POST /api/pedidos (duração ISO-8601)
+    ttl: ${IDEMPOTENCY_TTL:PT24H}
+    cleanup-delay-ms: ${IDEMPOTENCY_CLEANUP_DELAY_MS:600000}
+    cleanup-batch-size: ${IDEMPOTENCY_CLEANUP_BATCH_SIZE:500}
   kafka:
     retry:
       max-attempts: ${KAFKA_RETRY_MAX_ATTEMPTS:3}

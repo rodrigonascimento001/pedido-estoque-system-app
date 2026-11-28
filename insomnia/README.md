@@ -17,6 +17,8 @@ Depois execute `01 - Fluxo feliz`: crie o pedido, copie o `id` retornado para `p
 
 Para exercitar a compensação, use `02 - Saldo insuficiente`: crie o pedido, copie o `id` para `pedido_cancelado` e consulte até `status` ficar `CANCELADO`. O produto desse cenário deve continuar com saldo 1.
 
+Para ver a idempotência, a requisição **Criar pedido com estoque disponível** envia `Idempotency-Key` com o valor de `idempotency_key` do environment. Troque esse valor por um UUID novo antes de criar um pedido diferente. Enviar de novo com o mesmo valor devolve o mesmo pedido, com o header `Idempotent-Replayed: true` e sem criar outro; mudar o body mantendo a chave retorna `422`.
+
 Os pedidos começam como `PENDENTE` porque estoque e pedido conversam de forma assíncrona pelo Kafka. Todas as chamadas de negócio passam pelo gateway e usam o access token do Keycloak.
 
 ## Cadastro de usuário
