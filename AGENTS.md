@@ -8,7 +8,6 @@
   nunca *squash*, para as duas branches não divergirem.
 - Mudanças seguem o padrão OpenSpec (`openspec/changes/<nome>/` com proposal, design, specs e tasks;
   arquivadas em `openspec/changes/archive/` com a data, e specs consolidadas em `openspec/specs/`).
-- Changes ativas: `handle-kafka-poison-messages` (parte de mensagens malformadas do item 5).
 - Cadastro de usuários concluído na change `keycloak-user-registration` (arquivada em
   2026-11-27): gateway expõe `POST /api/usuarios` sem JWT, com rate limit por IP, e o
   `user-registration-service` cria contas no realm via Admin API com client credentials.
@@ -51,8 +50,7 @@ ficaram fora da change `harden-order-kafka-consistency`, já arquivada.
    (`@DltHandler`, métrica `kafka.dlt.records`, monitor `dlt-kafka`); replay remains an operational follow-up.
 5. **Kafka topology:** explicitly manage topic creation, partitions, and related scaling
    policy in a separate change. (A parte de mensagens malformadas, com
-   `ErrorHandlingDeserializer` e desvio para o DLT, está na change ativa
-   `handle-kafka-poison-messages`.)
+   `ErrorHandlingDeserializer` e desvio para o DLT, já foi concluída em change arquivada.)
 6. **Datadog artifacts out of date:** the dashboard widget "compensações e conflitos de lock" and the
    monitor `monitors/conflito-lock-estoque.json` query `estoque.compensacao` and
    `estoque.lock.conflito`, metrics removed with the atomic reservation. Remove or replace them,
