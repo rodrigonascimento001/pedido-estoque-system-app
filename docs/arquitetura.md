@@ -218,7 +218,7 @@ flowchart TD
   H --> H2
 ```
 
-_Um registro que não desserializa nunca chega ao `@DltHandler`, por isso a contagem `kafka.poison.records` existe à parte. Não há ferramenta de replay: o DLT é só inspeção e alerta (backlog A6)._
+_Um registro que não desserializa nunca chega ao `@DltHandler`, por isso a contagem `kafka.poison.records` existe à parte. Não há ferramenta de replay: o DLT é só inspeção e alerta (backlog A5)._
 
 ## 6. Como o outbox publica
 
@@ -265,4 +265,4 @@ _Só PENDENTE aceita transição. Se o evento chega antes de o pedido estar vis�
 
 ## Onde evoluir
 
-Ver o backlog em `AGENTS.md`. Pedido PENDENTE sem timeout nem compensação quando o estoque nunca responde está no item A4.
+Ver o backlog em `AGENTS.md`. Pedido PENDENTE sem timeout nem compensação quando o estoque nunca responde está no item A3.
