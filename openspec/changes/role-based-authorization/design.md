@@ -15,28 +15,28 @@ O gateway valida assinatura, issuer, audience e validade do JWT e depois encamin
 
 ## Decisions
 
-### D1. Duas roles de realm: `cliente` e `operador`
+### D1. Duas roles de realm: `customer` e `operator`
 
-`cliente` cria e consulta os próprios pedidos. `operador` gerencia estoque e consulta qualquer pedido, mas não cria pedido em nome de outro. Toda conta nova recebe `cliente` pelas roles padrão do realm; `operador` só é atribuído por quem administra o Keycloak. Alternativa descartada: uma role `admin` separada, sem uso hoje. Pode entrar depois sem quebrar nada.
+`customer` cria e consulta os próprios pedidos. `operator` gerencia estoque e consulta qualquer pedido, mas não cria pedido em nome de outro. Toda conta nova recebe `customer` pelas roles padrão do realm; `operator` só é atribuído por quem administra o Keycloak. Alternativa descartada: uma role `admin` separada, sem uso hoje. Pode entrar depois sem quebrar nada.
 
 ### D2. Onde cada decisão é tomada
 
-- **Gateway, política por rota** (grossa): `/api/estoque/**` exige `operador`; `/api/pedidos/**` exige `cliente` ou `operador`; cadastro e health continuam como estão. Resposta `403` quando o token é válido e falta a role.
+- **Gateway, política por rota** (grossa): `/api/estoque/**` exige `operator`; `/api/pedidos/**` exige `customer` ou `operator`; cadastro e health continuam como estão. Resposta `403` quando o token é válido e falta a role.
 - **pedido-service, visibilidade por registro** (fina): só o gateway sabe a role, mas só o serviço sabe de quem é o pedido. O gateway repassa as roles e o serviço decide.
 
 Alternativa descartada: o gateway consultar o serviço para saber o dono. Acoplamento e uma chamada extra por requisição.
 
 ### D3. Roles no token e no header interno
 
-As roles vêm de `realm_access.roles` (nome do claim em `app.security.jwt.roles-claim`). O gateway as converte em authorities `ROLE_<nome>` e repassa a lista, separada por vírgula, em `X-Authenticated-Roles`, removendo qualquer valor enviado pelo cliente (mesmo tratamento do `X-Authenticated-User`). A confiança nos headers continua dependendo de os serviços ficarem inalcançáveis fora da rede Docker, como já registrado no `AGENTS.md`.
+As roles vêm de `realm_access.roles` (nome do claim em `app.security.jwt.roles-claim`). O gateway as converte em authorities `ROLE_<nome>` e repassa a lista, separada por vírgula, em `X-Authenticated-Roles`, removendo qualquer valor enviado pelo customer (mesmo tratamento do `X-Authenticated-User`). A confiança nos headers continua dependendo de os serviços ficarem inalcançáveis fora da rede Docker, como já registrado no `AGENTS.md`.
 
 ### D4. Dono do pedido
 
-Coluna `usuario_id VARCHAR(255)` em `pedidos`, preenchida com o `sub` na criação. É obrigatória para pedidos novos: sem `X-Authenticated-User`, a criação responde `400`. Pedidos existentes ficam com `NULL`.
+Coluna `owner_id VARCHAR(255)` em `pedidos`, preenchida com o `sub` na criação. É obrigatória para pedidos novos: sem `X-Authenticated-User`, a criação responde `400`. Pedidos existentes ficam com `NULL`.
 
 ### D5. Regra de leitura e resposta `404`
 
-`GET /api/pedidos/{id}` devolve o pedido se o `X-Authenticated-User` é o dono, ou se as roles incluem `operador`. Caso contrário responde `404`, a mesma resposta de um pedido que não existe, para não revelar quais ids existem. Pedido com dono `NULL` só é visível para `operador`. Um contador `pedido.acesso.negado` (sem usuário ou id como tag) registra as negações.
+`GET /api/pedidos/{id}` devolve o pedido se o `X-Authenticated-User` é o dono, ou se as roles incluem `operator`. Caso contrário responde `404`, a mesma resposta de um pedido que não existe, para não revelar quais ids existem. Pedido com dono `NULL` só é visível para `operator`. Um contador `order.access.denied` (sem usuário ou id como tag) registra as negações.
 
 ### D6. Idempotência e autorização
 
@@ -48,21 +48,21 @@ Token válido sem roles de negócio vale como não autenticado para fins de rota
 
 ## Risks / Trade-offs
 
-- **Contas existentes sem `cliente`:** passam a receber `403`. Mitigação: o bootstrap do realm atribui `cliente` às contas existentes e às novas; documentar o passo.
+- **Contas existentes sem `customer`:** passam a receber `403`. Mitigação: o bootstrap do realm atribui `customer` às contas existentes e às novas; documentar o passo.
 - **Roles só no gateway:** se alguém publicar as portas dos serviços, os headers podem ser forjados. Risco já aceito e registrado; validar o JWT nos serviços fica para uma change futura.
 - **Duas fontes da regra** (rota no gateway, dono no serviço): mitigado por testes nas duas camadas e pela documentação da divisão.
 - **Dependência do repositório de infraestrutura:** as roles precisam existir antes do deploy; sem elas ninguém acessa a API.
 
 ## Migration Plan
 
-1. No repositório de infraestrutura: criar as roles, incluir `cliente` nas padrão, atribuir `cliente` às contas existentes e semear um `operador` local.
+1. No repositório de infraestrutura: criar as roles, incluir `customer` nas padrão, atribuir `customer` às contas existentes e semear um `operator` local.
 2. Aplicar a migration `V4` (coluna nula, sem reescrever dados).
 3. Publicar gateway e `pedido-service` juntos. Se o `pedido-service` subir primeiro, criações sem o header de usuário recebem `400` até o gateway atualizar.
 4. Rollback: reverter o código; a coluna pode ficar sem uso.
 
-## Open Questions
+## Decisions on the open questions (approved 2026-11-28)
 
-- Os nomes `cliente` e `operador` estão bons, ou prefere outros (por exemplo `customer` e `operator`)?
-- O `operador` deve poder consultar qualquer pedido, ou só o estoque? A proposta assume que sim, para suporte.
-- Quem aplica a mudança no repositório de infraestrutura: você ou eu, com acesso ao repositório?
-- Contas existentes recebem `cliente` automaticamente, ou prefere atribuir manualmente?
+- Os nomes das roles são `customer` e `operator`, em inglês. A partir desta change, nomes novos no código (classes, colunas, métricas, headers e roles) seguem em inglês; o que já existe em português não é renomeado nesta change.
+- O `operator` consulta qualquer pedido, para suporte.
+- A mudança no repositório de infraestrutura entra em PR próprio, preparado junto com a implementação.
+- Contas existentes recebem `customer` automaticamente pelo bootstrap do realm.

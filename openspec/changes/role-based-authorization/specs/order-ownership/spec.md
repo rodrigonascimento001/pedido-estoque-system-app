@@ -12,7 +12,7 @@ The order service SHALL store the authenticated subject received in `X-Authentic
 - **THEN** the service returns `400` and creates no order
 
 ### Requirement: Orders are visible only to their owner or an operator
-`GET /api/pedidos/{id}` SHALL return the order when the caller's subject is the owner or the caller's roles include `operador`. In every other case, including orders without an owner for non-operators, the service SHALL respond `404 Not Found` with the same body as for an order that does not exist.
+`GET /api/pedidos/{id}` SHALL return the order when the caller's subject is the owner or the caller's roles include `operator`. In every other case, including orders without an owner for non-operators, the service SHALL respond `404 Not Found` with the same body as for an order that does not exist.
 
 #### Scenario: Owner reads the order
 - **WHEN** the owner requests their order
@@ -21,10 +21,10 @@ The order service SHALL store the authenticated subject received in `X-Authentic
 #### Scenario: Another customer cannot read it
 - **WHEN** a different customer requests the order id
 - **THEN** the service returns `404`, indistinguishable from an unknown id
-- **AND** `pedido.acesso.negado` increases by one
+- **AND** `order.access.denied` increases by one
 
 #### Scenario: Operator reads any order
-- **WHEN** a caller with `operador` requests an order owned by someone else
+- **WHEN** a caller with `operator` requests an order owned by someone else
 - **THEN** the service returns `200` with the order
 
 #### Scenario: Legacy order without an owner
