@@ -4,13 +4,32 @@ server:
 spring:
   application:
     name: api-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/pedido-estoque}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:http://keycloak:8080/realms/pedido-estoque/protocol/openid-connect/certs}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   cloud:
+    aws:
+      region:
+        static: ${AWS_REGION:us-east-1}
     gateway:
       routes:
+        - id: user-registration-service
+          uri: ${USER_REGISTRATION_SERVICE_URI:http://localhost:8083}
+          predicates:
+            - Path=/api/usuarios
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                key-resolver: "#{@ipKeyResolver}"
         - id: pedido-service
           uri: ${PEDIDO_SERVICE_URI:http://localhost:8081}
           predicates:
@@ -32,11 +51,21 @@ spring:
                 redis-rate-limiter.burstCapacity: 40
                 key-resolver: "#{@ipKeyResolver}"
 
+app:
+  security:
+    jwt:
+      audience: ${KEYCLOAK_API_AUDIENCE:pedido-estoque-api}
+
 management:
+  server:
+    port: 9080
   endpoints:
     web:
       exposure:
-        include: health,gateway,metrics
+        include: health
+  endpoint:
+    health:
+      show-details: never
   statsd:
     metrics:
       export:

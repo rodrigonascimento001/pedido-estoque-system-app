@@ -1,0 +1,37 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: user-registration-service
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak-admin:
+            provider: keycloak-admin
+            client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:pedido-estoque-user-registration}
+            client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+        provider:
+          keycloak-admin:
+            token-uri: ${KEYCLOAK_TOKEN_URI:http://keycloak:8080/realms/pedido-estoque/protocol/openid-connect/token}
+
+keycloak:
+  admin:
+    base-url: ${KEYCLOAK_ADMIN_BASE_URL:http://keycloak:8080/admin/realms/pedido-estoque}
+
+management:
+  server:
+    port: 9083
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+  statsd:
+    metrics:
+      export:
+        enabled: false

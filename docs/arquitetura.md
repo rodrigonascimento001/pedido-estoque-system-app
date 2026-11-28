@@ -1,6 +1,6 @@
 # Arquitetura do sistema Pedido-Estoque
 
-Estado da `develop` em 24/11/2026 (com `handle-kafka-poison-messages`). Os diagramas são Mermaid e o GitHub os renderiza nesta página. Atualize-os na mesma change que alterar fluxo, tópicos ou componentes.
+Estado após as changes `api-security-keycloak` e `keycloak-user-registration`. Os diagramas são Mermaid e o GitHub os renderiza nesta página. Atualize-os na mesma change que alterar fluxo, tópicos ou componentes; quando o passo a passo local mudar, acompanhe também `docs/EXECUCAO-LOCAL.md`.
 
 ## 1. Componentes e dados
 
@@ -8,13 +8,26 @@ Cada serviço tem seu próprio Postgres. A única ligação entre pedido e estoq
 
 ```mermaid
 flowchart LR
-  C([Cliente]) -->|"HTTP :8080"| GW
-  subgraph GWB["api-gateway :8080"]
-    GW["AuthenticationFilter<br/>só confere prefixo Bearer"] --> RL["RequestRateLimiter<br/>20 req/s, burst 40, por IP"]
+  C([Cliente / navegador]) -->|"login Authorization Code + PKCE :8180"| KC
+  KC -->|"access token assinado"| C
+  C -->|"POST /api/usuarios, sem token :8080"| GW
+  C -->|"Bearer access token :8080"| GW
+  subgraph GWB["api-gateway :8080 / management :9080"]
+    GW["Spring Security Resource Server<br/>valida JWT exceto POST /api/usuarios"] --> RL["RequestRateLimiter por IP<br/>geral: 20 req/s, burst 40<br/>cadastro: 5 req/s, burst 10"]
   end
   RL <-->|"contadores"| R[("Redis")]
   RL -->|"/api/pedidos/**"| PS
   RL -->|"/api/estoque/**"| ES
+  subgraph INFRA["Compose de infraestrutura / rede compartilhada"]
+    KC["Keycloak :8080 interno / :8180 host<br/>realm pedido-estoque"]
+  end
+  subgraph RSB["user-registration-service :8083 interno"]
+    RS["RegistrationController<br/>UserRegistrationService<br/>client credentials do cliente técnico"]
+  end
+  RL -->|"/api/usuarios"| RS
+  RS -->|"Admin API: cria usuário habilitado"| KC
+  KC -.->|"token do cliente técnico"| RS
+  KC -.->|"JWKS / chaves de assinatura"| GW
   subgraph PSB["pedido-service :8081"]
     PS["PedidoController<br/>PedidoService"]
     PO["OutboxRelay<br/>a cada 1s, lote 25"]
@@ -44,9 +57,47 @@ flowchart LR
   DD -.- ESB
 ```
 
-_Linhas cheias são o caminho normal. Linhas tracejadas são o desvio para tópicos de retry e DLT. Postgres, Kafka e Redis ficam fora do `docker-compose.yml` da aplicação (a stack de infraestrutura é separada). As portas 8081 e 8082 também estão publicadas no host, o que contorna o gateway (backlog 1)._
+_O navegador pode criar a conta antes de ter token: `POST /api/usuarios` é o único endpoint de API anônimo e é rate-limitado separadamente. O `user-registration-service` usa o cliente confidencial `pedido-estoque-user-registration` (permissão `manage-users`) para chamar o Admin API; senha, token de serviço e client secret não voltam na resposta nem entram em logs/métricas/traces. Depois do cadastro, o browser autentica no Keycloak (Authorization Code + PKCE) e recebe um access token. O cliente envia o token ao gateway; o gateway valida assinatura usando o JWKS do Keycloak, `iss`, `aud` e validade temporal antes de aplicar rate limit e rotear a chamada. Não há exigência de roles/scopes nesta etapa. Linhas cheias são o caminho normal; linhas tracejadas indicam consulta de chaves/token técnico ou desvio para retry/DLT. Postgres, Kafka, Redis e Keycloak ficam no Compose de infraestrutura, separado do Compose da aplicação. Apenas gateway (`8080`) e Keycloak (`8180`) são publicados no host; cadastro, pedido, estoque e management permanecem internos._
 
-## 2. Criar pedido com estoque disponível
+## 2. Cadastro de usuário e login
+
+Uma conta precisa existir no realm antes do login. O cadastro é público no gateway, mas a criação no Keycloak usa uma identidade técnica isolada, com permissão apenas de gerenciar usuários. A senha enviada pelo cliente é *write-only*: não é retornada, persistida pela aplicação nem registrada em logs, métricas ou traces.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor C as Cliente
+  participant GW as api-gateway
+  participant RS as user-registration-service
+  participant KC as Keycloak (realm pedido-estoque)
+
+  C->>GW: POST /api/usuarios (sem Authorization)
+  GW->>GW: rate limit por IP (5 req/s, burst 10)
+  GW->>RS: encaminha pela rede Docker
+  RS->>RS: valida username, email e senha
+  RS->>KC: POST /token (client credentials do cliente técnico)
+  KC-->>RS: access token do Admin API
+  RS->>KC: POST /admin/realms/pedido-estoque/users (enabled, senha não temporária)
+  alt conta criada
+    KC-->>RS: 201 + Location com o id
+    RS-->>C: 201 {id, username}, sem senha
+  else username/e-mail duplicado
+    KC-->>RS: 409
+    RS-->>C: 409 user_already_exists
+  else dado ou senha inválidos
+    KC-->>RS: 400/422
+    RS-->>C: 400 invalid_registration
+  else Admin API indisponível
+    RS-->>C: 503 identity_provider_unavailable
+  end
+  C->>KC: login Authorization Code + PKCE com a nova conta
+  KC-->>C: access token com audience pedido-estoque-api
+  C->>GW: rota de negócio protegida + Bearer token
+```
+
+_A conta começa habilitada e sem roles adicionais; e-mail verificado, recuperação e MFA ficam fora desta change. A única operação anônima da API é o `POST /api/usuarios`; os demais métodos e caminhos continuam exigindo JWT. O passo a passo com curl e Insomnia está em `docs/EXECUCAO-LOCAL.md`._
+
+## 3. Criar pedido com estoque disponível
 
 O cliente recebe 201 assim que o pedido é gravado como PENDENTE. A confirmação chega depois, de forma assíncrona. Nenhuma publicação no Kafka acontece dentro da transação HTTP.
 
@@ -54,6 +105,7 @@ O cliente recebe 201 assim que o pedido é gravado como PENDENTE. A confirmaçã
 sequenceDiagram
   autonumber
   actor C as Cliente
+  participant KC as Keycloak
   participant GW as api-gateway
   participant PS as pedido-service
   participant PDB as Postgres pedido
@@ -61,8 +113,13 @@ sequenceDiagram
   participant ES as estoque-service
   participant EDB as Postgres estoque
 
-  C->>GW: POST /api/pedidos
-  GW->>GW: valida prefixo Bearer e limite por IP no Redis
+  C->>KC: login do usuário (Authorization Code + PKCE)
+  KC-->>C: access token (issuer e audience configurados)
+  C->>GW: POST /api/pedidos + Bearer token
+  GW->>GW: valida assinatura, issuer, audience e validade do JWT
+  GW->>KC: busca JWKS (quando necessário, pela rede Docker)
+  KC-->>GW: chaves públicas do realm
+  GW->>GW: aplica limite por IP no Redis
   GW->>PS: encaminha
   rect rgba(120,150,200,0.15)
   Note over PS,PDB: uma transação
@@ -101,7 +158,7 @@ sequenceDiagram
 
 _As duas caixas sombreadas são as fronteiras transacionais. Se o processo cair entre gravar e publicar, o relay publica no próximo ciclo (entrega pelo menos uma vez)._
 
-## 3. Estoque insuficiente
+## 4. Estoque insuficiente
 
 A reserva é tudo ou nada. Se um item não tem saldo, nada é baixado, o resultado negativo é gravado e o pedido é cancelado.
 
@@ -134,7 +191,7 @@ sequenceDiagram
 
 _A reentrega do mesmo evento não baixa saldo de novo: o resultado gravado por `pedidoId` é a fonte da resposta._
 
-## 4. Retry, DLT e mensagem corrompida
+## 5. Retry, DLT e mensagem corrompida
 
 Vale para os três consumers. A decisão central é se o erro é transitório (tenta de novo) ou se o registro nunca vai processar (vai direto ao DLT com os bytes originais).
 
@@ -158,7 +215,7 @@ flowchart TD
 
 _Um registro que não desserializa nunca chega ao `@DltHandler`, por isso a contagem `kafka.poison.records` existe à parte. Não há ferramenta de replay: o DLT é só inspeção e alerta (backlog 4)._
 
-## 5. Como o outbox publica
+## 6. Como o outbox publica
 
 O mesmo desenho existe nos dois serviços, cada um com sua própria tabela `outbox_event`.
 
@@ -188,7 +245,7 @@ sequenceDiagram
 
 _Garantia: pelo menos uma vez. Duplicatas são absorvidas no destino (reserva idempotente por pedido, transição só a partir de PENDENTE)._
 
-## 6. Estados do pedido
+## 7. Estados do pedido
 
 ```mermaid
 stateDiagram-v2

@@ -6,7 +6,8 @@ Implementação inicial da arquitetura esboçada: Client → CDN/LB → API Gate
 ## Módulos
 
 - **common** — eventos compartilhados (`PedidoCriadoEvent`, `EstoqueReservadoEvent`, `EstoqueIndisponivelEvent`)
-- **api-gateway** — Spring Cloud Gateway: roteamento, autenticação (stub Bearer), rate limit (Redis)
+- **api-gateway** — Spring Cloud Gateway: validação de JWT do Keycloak, roteamento e rate limit (Redis)
+- **user-registration-service** — cria usuários habilitados no realm `pedido-estoque` pelo Admin API do Keycloak, usando client credentials de menor privilégio
 - **pedido-service** — cria pedidos (status `PENDENTE`), grava `PedidoCriadoEvent` no outbox transacional, escuta a resposta do estoque
 - **estoque-service** — reserva o estoque de cada pedido de forma atômica e idempotente (uma transação por pedido) e publica `EstoqueReservadoEvent`/`EstoqueIndisponivelEvent` pelo outbox
 
@@ -51,7 +52,15 @@ docker compose up -d --build
 
 O Compose de infraestrutura cria a rede compartilhada `pedido-estoque-network`. O Compose de aplicação usa essa rede e resolve os serviços de infraestrutura pelos nomes `kafka`, `redis`, `postgres-pedidos` e `postgres-estoque`.
 
-As APIs ficam disponíveis em `localhost:8080` (gateway), `localhost:8081` (pedido) e `localhost:8082` (estoque). Para observar os containers, use `docker compose ps` e `docker compose logs -f` em cada repositório.
+O gateway fica disponível em `http://localhost:8080` e o Keycloak em `http://localhost:8180`. O cadastro público é feito por `POST /api/usuarios` e cria a conta no realm `pedido-estoque`; depois, use o login Authorization Code + PKCE para obter um token antes de chamar as rotas protegidas. O fluxo está documentado em [insomnia/README.md](insomnia/README.md).
+
+### Autenticação da API
+
+O cliente autentica o usuário no Keycloak pelo fluxo de login interativo Authorization Code com PKCE e envia o access token como `Authorization: Bearer <token>` ao gateway. O gateway valida assinatura pelas chaves JWKS do realm, issuer, audience `pedido-estoque-api` e claims temporais antes de encaminhar a chamada. Nesta etapa, qualquer token válido do realm com a audience esperada é aceito; não há exigência de roles ou scopes.
+
+Defaults locais: realm `pedido-estoque`, issuer `http://localhost:8180/realms/pedido-estoque`, Keycloak no host em `http://localhost:8180` e JWKS acessado pelos containers em `http://keycloak:8080/realms/pedido-estoque/protocol/openid-connect/certs`. Configure `KEYCLOAK_ISSUER_URI`, `KEYCLOAK_JWK_SET_URI` e `KEYCLOAK_API_AUDIENCE` no `.env` quando necessário. O issuer deve corresponder exatamente ao claim `iss` do token. Credenciais de desenvolvimento não devem ser reutilizadas em produção.
+
+Somente o gateway publica a API no host (`8080`). `user-registration-service`, `pedido-service` e `estoque-service` ficam acessíveis apenas pela rede Docker compartilhada. O health do gateway é publicado somente no loopback em `9080`; os demais listeners de gerenciamento não são publicados. Apenas health fica habilitado nos listeners de gerenciamento.
 
 Para parar sem remover os dados persistidos, execute `docker compose down` primeiro no repositório da aplicação e depois no repositório de infraestrutura. Não use `-v` se quiser preservar os volumes dos bancos.
 
@@ -59,7 +68,7 @@ O Datadog Agent e opcional e pertence ao Compose de infraestrutura. Configure `D
 
 ## CI e publicação de imagens
 
-O GitHub Actions executa `mvn -B verify` em pull requests e alterações integradas às branches `develop` e `main`. Após uma alteração integrada em `main` passar pela verificação, as imagens privadas de `pedido-service`, `estoque-service` e `api-gateway` são publicadas no GHCR com uma tag baseada no SHA do commit e a tag móvel `main`. Alterações em `develop` não publicam imagens. A publicação não realiza deploy.
+O GitHub Actions executa `mvn -B verify` em pull requests e alterações integradas às branches `develop` e `main`. Após uma alteração integrada em `main` passar pela verificação, as imagens privadas de `pedido-service`, `estoque-service`, `api-gateway` e `user-registration-service` são publicadas no GHCR com uma tag baseada no SHA do commit e a tag móvel `main`. Alterações em `develop` não publicam imagens. A publicação não realiza deploy.
 
 ## Configuração via AWS (perfil `aws`)
 
@@ -137,7 +146,7 @@ Runbook:
 3. Para o toggle, publique o parâmetro com `--overwrite` e reinicie os serviços
    que você quer afetar.
 4. Confira nos logs `Loading secrets from AWS Secret Manager` e
-   `Loading property from AWS Parameter Store` e valide `/actuator/health`.
+   `Loading property from AWS Parameter Store`. Os endpoints Actuator ficam em portas de gerenciamento internas e não são publicados no host.
 
 Rollback: remova `aws` de `SPRING_PROFILES_ACTIVE` e reinicie. O serviço volta a
 usar o `application.yml` (`DB_*`) e deixa de ler segredo/parâmetro. Alternativa:
@@ -159,19 +168,22 @@ mvn -pl api-gateway spring-boot:run
 ## Testando o fluxo
 
 ```bash
-# 1. cadastrar estoque de um produto
-curl -X POST http://localhost:8082/api/estoque \
+# Defina TOKEN com um access token válido do realm local do Keycloak.
+
+# 1. cadastrar estoque pelo gateway
+curl -X POST http://localhost:8080/api/estoque \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"produtoId":"11111111-1111-1111-1111-111111111111","quantidade":10}'
 
-# 2. criar pedido via gateway (rota exige header Authorization: Bearer <qualquer-token>, é um stub)
+# 2. criar pedido via gateway
 curl -X POST http://localhost:8080/api/pedidos \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer dev-token" \
+  -H "Authorization: Bearer $TOKEN" \
   -d '{"itens":[{"produtoId":"11111111-1111-1111-1111-111111111111","quantidade":2,"precoUnitario":19.90}]}'
 
 # 3. consultar status do pedido (assíncrono — pode levar alguns ms até virar CONFIRMADO)
-curl http://localhost:8080/api/pedidos/{id} -H "Authorization: Bearer dev-token"
+curl http://localhost:8080/api/pedidos/{id} -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Testes de integração (Testcontainers)
@@ -254,9 +266,8 @@ Decisões:
 - **Métrica nova** com prefixo fora da lista (ex.: `pagamento.*`) **não aparece** no Datadog até ser
   liberada no `enable:` do serviço. É de propósito: revisar as tags da métrica é a hora de pensar na cardinalidade.
 
-Como conferir (com o serviço rodando em perfil `datadog`): `curl localhost:8081/actuator/metrics`
-deve listar apenas nomes dos prefixos liberados. Para acompanhar o volume real, use *Metrics Summary*
-e a página de *Usage* (métricas customizadas) no Datadog.
+Os endpoints HTTP do Actuator não são publicados no host. Para acompanhar o volume real das métricas,
+use *Metrics Summary* e a página de *Usage* (métricas customizadas) no Datadog.
 
 > Estas regras só valem no perfil `datadog`; em dev local e nos testes todas as métricas continuam ativas.
 
@@ -332,8 +343,7 @@ notepad .env              # habilite SPRING_PROFILES_ACTIVE=datadog e DD_TRACE_E
 docker compose up -d --build --force-recreate
 ```
 
-Depois de gerar tráfego (curls da seção "Testando o fluxo", mas com estoque cadastrado via
-`localhost:8082`), procure no Datadog:
+Depois de gerar tráfego (curls da seção "Testando o fluxo" pelo gateway com um access token), procure no Datadog:
 
 - **APM → Traces**: serviços `api-gateway`, `pedido-service`, `estoque-service`, `env:local`
 - **Metrics Explorer**: `pedido.saga.duracao.avg`, `estoque.reserva`, `jvm.heap_memory`
@@ -353,7 +363,7 @@ Pontos de atenção:
 
 ## Próximos passos sugeridos
 
-- [ ] Autenticação real no gateway (validação JWT — emissor, expiração, escopos)
+- [x] Segurança da API com validação JWT do Keycloak, serviços privados no Compose e Actuator isolado (`api-security-keycloak`)
 - [x] Transactional outbox no pedido-service e no estoque-service
 - [ ] Cache Redis para leitura de pedidos/estoque (reduzir carga no banco primário)
 - [ ] Load balancer / múltiplas réplicas dos serviços (Docker Compose `deploy.replicas` ou k8s)

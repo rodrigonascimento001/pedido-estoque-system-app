@@ -39,8 +39,6 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     labels:
       com.datadoghq.ad.logs: '[{"source": "java", "service": "pedido-service"}]'
-    ports:
-      - "8081:8081"
     networks:
       - pedido-estoque-network
 
@@ -59,8 +57,23 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
     labels:
       com.datadoghq.ad.logs: '[{"source": "java", "service": "estoque-service"}]'
-    ports:
-      - "8082:8082"
+    networks:
+      - pedido-estoque-network
+
+  user-registration-service:
+    build:
+      context: .
+      args:
+        MODULE: user-registration-service
+    environment:
+      <<: *common-env
+      DD_SERVICE: user-registration-service
+      KEYCLOAK_ADMIN_BASE_URL: ${KEYCLOAK_ADMIN_BASE_URL:-http://keycloak:8080/admin/realms/pedido-estoque}
+      KEYCLOAK_TOKEN_URI: ${KEYCLOAK_TOKEN_URI:-http://keycloak:8080/realms/pedido-estoque/protocol/openid-connect/token}
+      KEYCLOAK_ADMIN_CLIENT_ID: ${KEYCLOAK_ADMIN_CLIENT_ID:-pedido-estoque-user-registration}
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_USER_REGISTRATION_CLIENT_SECRET:?Configure KEYCLOAK_USER_REGISTRATION_CLIENT_SECRET no .env}
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "java", "service": "user-registration-service"}]'
     networks:
       - pedido-estoque-network
 
@@ -74,16 +87,23 @@ services:
         condition: service_started
       estoque-service:
         condition: service_started
+      user-registration-service:
+        condition: service_started
     environment:
       <<: *common-env
       DD_SERVICE: api-gateway
       REDIS_HOST: redis
+      USER_REGISTRATION_SERVICE_URI: http://user-registration-service:8083
       PEDIDO_SERVICE_URI: http://pedido-service:8081
       ESTOQUE_SERVICE_URI: http://estoque-service:8082
+      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-http://localhost:8180/realms/pedido-estoque}
+      KEYCLOAK_JWK_SET_URI: ${KEYCLOAK_JWK_SET_URI:-http://keycloak:8080/realms/pedido-estoque/protocol/openid-connect/certs}
+      KEYCLOAK_API_AUDIENCE: ${KEYCLOAK_API_AUDIENCE:-pedido-estoque-api}
     labels:
       com.datadoghq.ad.logs: '[{"source": "java", "service": "api-gateway"}]'
     ports:
       - "8080:8080"
+      - "127.0.0.1:9080:9080"
     networks:
       - pedido-estoque-network
 
@@ -91,3 +111,4 @@ networks:
   pedido-estoque-network:
     external: true
     name: pedido-estoque-network
+
