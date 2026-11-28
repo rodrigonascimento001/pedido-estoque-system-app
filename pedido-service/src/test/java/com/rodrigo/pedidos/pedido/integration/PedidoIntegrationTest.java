@@ -150,7 +150,10 @@ class PedidoIntegrationTest extends IntegrationTestBase {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables "
                         + "WHERE table_schema = ? AND table_name = 'outbox_event'", Integer.class, schema))
                 .isEqualTo(1);
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("2");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables "
+                        + "WHERE table_schema = ? AND table_name = 'idempotency_key'", Integer.class, schema))
+                .isEqualTo(1);
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("3");
     }
 
     @Test
